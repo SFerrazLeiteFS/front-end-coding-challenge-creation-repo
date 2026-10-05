@@ -1,6 +1,8 @@
 import type { FormField, Priority, Process, Task, TaskStatus, User } from '../model.ts';
 import { createRandom } from '../random.ts';
-import { DAY, iso, processDefinitions, startOfDay } from './processes.ts';
+import { DAY, HOUR, iso, startOfDay } from '../time.ts';
+import { processDefinitions } from './processes.ts';
+import { team } from './team.ts';
 
 export interface DataSet {
   processes: Process[];
@@ -9,15 +11,12 @@ export interface DataSet {
   tasks: Map<string, Task>;
 }
 
-const HOUR = 60 * 60 * 1000;
-
-export const team: User[] = ['Alex Berger', 'Jamie Novak', 'Morgan Fischer', 'Riley Weiss', 'Taylor Kim'].map(
-  (displayName) => ({ id: `user-${displayName.toLowerCase().replace(' ', '.')}`, displayName }),
-);
-
 export const taskId = (n: number) => `task-${String(n).padStart(4, '0')}`;
 
-/** Builds the full data set. Same seed and same day give the same data. */
+/**
+ * Builds the full data set from the seed. Dates are relative to the start of the current day (UTC),
+ * so the same seed gives the same data all day long.
+ */
 export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCount: number; now: number }): DataSet {
   const random = createRandom(seed);
   const today = startOfDay(now);
@@ -27,7 +26,7 @@ export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCo
   for (let n = 1; n <= taskCount; n++) {
     const definition = random.weighted(processDefinitions.map((d) => [d, d.weight] as const));
     const form = forms.get(definition.process.id)!;
-    const { title, values } = definition.seed(random, today, form);
+    const { title, values } = definition.sampleTask(random, today, form);
 
     const createdAt = today - random.int(1, 30 * 24) * HOUR;
     const status = random.weighted<TaskStatus>([
@@ -57,7 +56,7 @@ export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCo
       createdAt: iso(createdAt),
       dueAt,
       completedBy: completed ? random.pick(team) : null,
-      completedAt: completed ? iso(createdAt + random.int(1, Math.max(1, Math.floor((now - createdAt) / HOUR))) * HOUR) : null,
+      completedAt: completed ? iso(createdAt + random.int(1, (today - createdAt) / HOUR) * HOUR) : null,
       values,
     });
   }

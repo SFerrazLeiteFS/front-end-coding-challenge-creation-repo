@@ -2,8 +2,8 @@ import { createManualClock, createMockServer, type MockConfig } from '../starter
 
 export const MOCK_URL = 'http://localhost:4000/graphql';
 
-export function setup(config: Partial<MockConfig> = {}) {
-  const clock = createManualClock();
+export function setup(config: Partial<MockConfig> = {}, { now }: { now?: number } = {}) {
+  const clock = createManualClock(now);
   const server = createMockServer({ config: { chaos: false, ...config }, clock });
 
   async function gql<T = any>(

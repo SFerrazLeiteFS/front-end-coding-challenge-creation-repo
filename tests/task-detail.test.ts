@@ -159,6 +159,10 @@ describe('task detail', () => {
         if (value.__typename === 'NumberValue') {
           if (field.min !== null) expect(value.number).toBeGreaterThanOrEqual(field.min);
           if (field.max !== null) expect(value.number).toBeLessThanOrEqual(field.max);
+          if (field.step !== null) {
+            const steps = (value.number - (field.min ?? 0)) / field.step;
+            expect(Math.abs(steps - Math.round(steps)), `${task.id} ${value.key}=${value.number}`).toBeLessThan(1e-6);
+          }
         }
         if (value.__typename === 'DateValue') {
           expect(Number.isNaN(Date.parse(value.date))).toBe(false);
@@ -214,13 +218,34 @@ describe('determinism', () => {
     expect(other).not.toEqual(first);
   });
 
-  it('resets to the seeded data set', async () => {
-    const { server, gql } = setup({ seed: 7 });
-    const before = await loadAllTasks(gql, 5);
+  it('keeps the data stable throughout the day', async () => {
+    const morning = await loadAllTasks(setup({ seed: 7 }, { now: Date.UTC(2026, 2, 10, 0, 30) }).gql, 50);
+    const evening = await loadAllTasks(setup({ seed: 7 }, { now: Date.UTC(2026, 2, 10, 23, 30) }).gql, 50);
 
-    const response = await server.fetch(new Request(new URL('/__mock/reset', MOCK_URL), { method: 'POST' }));
+    expect(evening).toEqual(morning);
+  });
+
+  it('regenerates the data set on reset', async () => {
+    const { server, clock, gql } = setup({ seed: 7 });
+    const before = await loadAllTasks(gql, 5);
+    const reset = () => server.fetch(new Request(new URL('/__mock/reset', MOCK_URL), { method: 'POST' }));
+
+    clock.advance(2 * 24 * 60 * 60 * 1000);
+    expect(await loadAllTasks(gql, 5)).toEqual(before);
+
+    const response = await reset();
 
     expect(response.status).toBe(200);
-    expect(await loadAllTasks(gql, 5)).toEqual(before);
+    const after = await loadAllTasks(gql, 5);
+    expect(after).not.toEqual(before);
+    expect(after.map((task) => task.title)).toEqual(before.map((task) => task.title));
+  });
+
+  it('answers unknown control endpoints with 404', async () => {
+    const { server } = setup();
+
+    const response = await server.fetch(new Request(new URL('/__mock/nope', MOCK_URL), { method: 'POST' }));
+
+    expect(response.status).toBe(404);
   });
 });

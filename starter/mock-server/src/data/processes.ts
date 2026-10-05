@@ -1,10 +1,8 @@
 import type { Decision, FieldValue, FormField, Process } from '../model.ts';
 import type { Random } from '../random.ts';
+import { DAY, iso } from '../time.ts';
+import { team } from './team.ts';
 
-const DAY = 24 * 60 * 60 * 1000;
-const iso = (ms: number) => new Date(ms).toISOString();
-export const startOfDay = (ms: number) => ms - (ms % DAY);
-export { DAY, iso };
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 type Options<T> = Omit<T, '__typename' | 'key' | 'label' | 'required' | 'helpText'> & {
@@ -20,41 +18,41 @@ const base = (key: string, label: string, required = false, helpText?: string) =
   helpText: helpText ?? null,
 });
 
-const textField = (key: string, label: string, o: Partial<Options<Field<'TextField'>>> = {}): FormField => ({
+const textField = (key: string, label: string, options: Partial<Options<Field<'TextField'>>> = {}): FormField => ({
   __typename: 'TextField',
-  ...base(key, label, o.required, o.helpText),
-  multiline: o.multiline ?? false,
-  maxLength: o.maxLength ?? null,
-  pattern: o.pattern ?? null,
+  ...base(key, label, options.required, options.helpText),
+  multiline: options.multiline ?? false,
+  maxLength: options.maxLength ?? null,
+  pattern: options.pattern ?? null,
 });
-const numberField = (key: string, label: string, o: Partial<Options<Field<'NumberField'>>> = {}): FormField => ({
+const numberField = (key: string, label: string, options: Partial<Options<Field<'NumberField'>>> = {}): FormField => ({
   __typename: 'NumberField',
-  ...base(key, label, o.required, o.helpText),
-  min: o.min ?? null,
-  max: o.max ?? null,
-  step: o.step ?? null,
-  unit: o.unit ?? null,
+  ...base(key, label, options.required, options.helpText),
+  min: options.min ?? null,
+  max: options.max ?? null,
+  step: options.step ?? null,
+  unit: options.unit ?? null,
 });
-const dateField = (key: string, label: string, o: Partial<Options<Field<'DateField'>>> = {}): FormField => ({
+const dateField = (key: string, label: string, options: Partial<Options<Field<'DateField'>>> = {}): FormField => ({
   __typename: 'DateField',
-  ...base(key, label, o.required, o.helpText),
-  min: o.min ?? null,
-  max: o.max ?? null,
+  ...base(key, label, options.required, options.helpText),
+  min: options.min ?? null,
+  max: options.max ?? null,
 });
 const selectField = (
   key: string,
   label: string,
-  options: string[],
-  o: Partial<Options<Field<'SelectField'>>> = {},
+  choices: string[],
+  options: Partial<Options<Field<'SelectField'>>> = {},
 ): FormField => ({
   __typename: 'SelectField',
-  ...base(key, label, o.required, o.helpText),
-  options: options.map((option) => ({ value: option.toLowerCase().replace(/[^a-z0-9]+/g, '-'), label: option })),
-  multiple: o.multiple ?? false,
+  ...base(key, label, options.required, options.helpText),
+  options: choices.map((choice) => ({ value: choice.toLowerCase().replace(/[^a-z0-9]+/g, '-'), label: choice })),
+  multiple: options.multiple ?? false,
 });
-const booleanField = (key: string, label: string, o: { required?: boolean; helpText?: string } = {}): FormField => ({
+const booleanField = (key: string, label: string, options: Partial<Options<Field<'BooleanField'>>> = {}): FormField => ({
   __typename: 'BooleanField',
-  ...base(key, label, o.required, o.helpText),
+  ...base(key, label, options.required, options.helpText),
 });
 const decisionField = (allowed: Decision[], commentRequiredFor: Decision[]): FormField => ({
   __typename: 'DecisionField',
@@ -66,15 +64,20 @@ const decisionField = (allowed: Decision[], commentRequiredFor: Decision[]): For
 const commentField = (helpText: string) =>
   textField('comment', 'Comment', { multiline: true, maxLength: 1000, helpText });
 
-const optionValue = (field: FormField, index: number) =>
-  field.__typename === 'SelectField' ? field.options[index]!.value : '';
+/** Values of `count` random options of the select field `key`, in option order. */
+const pickOptions = (random: Random, form: FormField[], key: string, count = 1) => {
+  const field = form.find((f) => f.key === key);
+  if (field?.__typename !== 'SelectField') throw new Error(`${key} is not a select field`);
+  const picked = new Set(random.sample(field.options, count));
+  return field.options.filter((option) => picked.has(option)).map((option) => option.value);
+};
 
-const text = (key: string, value: string): FieldValue => ({ __typename: 'TextValue', key, text: value });
-const number = (key: string, value: number): FieldValue => ({ __typename: 'NumberValue', key, number: value });
-const date = (key: string, ms: number): FieldValue => ({ __typename: 'DateValue', key, date: iso(ms) });
-const select = (key: string, values: string[]): FieldValue => ({ __typename: 'SelectValue', key, selected: values });
+const textValue = (key: string, value: string): FieldValue => ({ __typename: 'TextValue', key, text: value });
+const numberValue = (key: string, value: number): FieldValue => ({ __typename: 'NumberValue', key, number: value });
+const dateValue = (key: string, ms: number): FieldValue => ({ __typename: 'DateValue', key, date: iso(ms) });
+const selectValue = (key: string, values: string[]): FieldValue => ({ __typename: 'SelectValue', key, selected: values });
 
-export interface TaskSeed {
+export interface SampleTask {
   title: string;
   values: FieldValue[];
 }
@@ -86,7 +89,7 @@ export interface ProcessDefinition {
   /** The process's form. Date limits are relative to `today` (start of the day the data set was generated). */
   form(today: number): FormField[];
   /** Title and prefilled values for a new task. */
-  seed(random: Random, today: number, form: FormField[]): TaskSeed;
+  sampleTask(random: Random, today: number, form: FormField[]): SampleTask;
 }
 
 const companies = [
@@ -103,7 +106,6 @@ const firstNames = ['Alex', 'Jamie', 'Morgan', 'Riley', 'Taylor', 'Casey', 'Jord
 const lastNames = ['Berger', 'Novak', 'Fischer', 'Weiss', 'Horvat', 'Kim', 'Moreau', 'Silva', 'Lindqvist', 'Okafor'];
 const person = (random: Random) => `${random.pick(firstNames)} ${random.pick(lastNames)}`;
 
-const field = (form: FormField[], key: string) => form.find((f) => f.key === key)!;
 
 export const processDefinitions: ProcessDefinition[] = [
   {
@@ -118,15 +120,15 @@ export const processDefinitions: ProcessDefinition[] = [
       decisionField(['APPROVE', 'REJECT', 'RETURN'], ['REJECT', 'RETURN']),
       commentField('Required when rejecting or returning the invoice.'),
     ],
-    seed(random, _today, form) {
+    sampleTask(random, _today, form) {
       const invoiceNumber = `INV-${String(random.int(0, 999_999)).padStart(6, '0')}`;
       const company = random.pick(companies);
       return {
         title: `Invoice ${invoiceNumber} from ${company}`,
         values: [
-          text('invoiceNumber', invoiceNumber),
-          number('amount', round2(random.int(4_000, 2_500_000) / 100)),
-          select('costCenter', [optionValue(field(form, 'costCenter'), random.int(0, 4))]),
+          textValue('invoiceNumber', invoiceNumber),
+          numberValue('amount', round2(random.int(4_000, 2_500_000) / 100)),
+          selectValue('costCenter', pickOptions(random, form, 'costCenter')),
         ],
       };
     },
@@ -142,17 +144,17 @@ export const processDefinitions: ProcessDefinition[] = [
       decisionField(['APPROVE', 'REJECT'], ['REJECT']),
       commentField('Required when rejecting the request.'),
     ],
-    seed(random, today, form) {
+    sampleTask(random, today, form) {
       const employee = person(random);
       const firstDay = today + random.int(3, 60) * DAY;
       const days = random.int(1, 15);
       return {
         title: `Leave request: ${employee}, ${days} ${days === 1 ? 'day' : 'days'}`,
         values: [
-          select('leaveType', [optionValue(field(form, 'leaveType'), random.weighted([[0, 8], [1, 1], [2, 1]] as const))]),
-          date('firstDay', firstDay),
-          date('lastDay', firstDay + (days - 1) * DAY),
-          number('days', days),
+          selectValue('leaveType', random.chance(0.8) ? ['vacation'] : pickOptions(random, form, 'leaveType')),
+          dateValue('firstDay', firstDay),
+          dateValue('lastDay', firstDay + (days - 1) * DAY),
+          numberValue('days', days),
         ],
       };
     },
@@ -173,16 +175,16 @@ export const processDefinitions: ProcessDefinition[] = [
       decisionField(['APPROVE', 'REJECT', 'RETURN'], ['REJECT', 'RETURN']),
       commentField('Required when rejecting or sending the contract back.'),
     ],
-    seed(random, today) {
+    sampleTask(random, today, form) {
       const counterparty = random.pick(companies);
       const kind = random.pick(['Service agreement', 'Framework contract', 'Maintenance contract', 'License agreement']);
       return {
         title: `Contract review: ${kind} with ${counterparty}`,
         values: [
-          text('contractTitle', `${kind} ${new Date(today).getUTCFullYear()}`),
-          text('counterparty', counterparty),
-          number('annualValue', random.int(5, 400) * 1000),
-          date('renewalDate', today + random.int(90, 720) * DAY),
+          textValue('contractTitle', `${kind} ${new Date(today).getUTCFullYear()}`),
+          textValue('counterparty', counterparty),
+          numberValue('annualValue', random.int(5, 400) * 1000),
+          dateValue('renewalDate', today + random.int(90, 720) * DAY),
         ],
       };
     },
@@ -200,19 +202,17 @@ export const processDefinitions: ProcessDefinition[] = [
       decisionField(['APPROVE', 'REJECT'], ['REJECT']),
       commentField('Required when rejecting the order.'),
     ],
-    seed(random, today, form) {
+    sampleTask(random, today, form) {
       const item = random.pick(['Laptops', 'Office chairs', 'Monitors', 'Printer toner', 'Standing desks', 'Headsets']);
       const quantity = random.int(1, 40);
-      const supplier = field(form, 'supplier');
-      const supplierIndex = random.int(0, companies.length - 1);
       return {
         title: `Purchase order: ${quantity} × ${item}`,
         values: [
-          select('supplier', [optionValue(supplier, supplierIndex)]),
-          text('items', `${quantity} × ${item}`),
-          number('quantity', quantity),
-          number('unitPrice', round2(random.int(500, 250_000) / 100)),
-          date('deliveryDate', today + random.int(7, 45) * DAY),
+          selectValue('supplier', pickOptions(random, form, 'supplier')),
+          textValue('items', `${quantity} × ${item}`),
+          numberValue('quantity', quantity),
+          numberValue('unitPrice', round2(random.int(500, 250_000) / 100)),
+          dateValue('deliveryDate', today + random.int(7, 45) * DAY),
           { __typename: 'BooleanValue', key: 'urgent', bool: random.chance(0.2) },
         ],
       };
@@ -238,17 +238,15 @@ export const processDefinitions: ProcessDefinition[] = [
       }),
       textField('note', 'Note to the employee', { multiline: true, maxLength: 500 }),
     ],
-    seed(random, _today, form) {
+    sampleTask(random, _today, form) {
       const employee = person(random);
       const purpose = random.pick(['Customer visit', 'Trade fair', 'Team offsite', 'Conference', 'Training course']);
-      const categories = field(form, 'categories');
-      const picked = random.sample([0, 1, 2, 3, 4], random.int(1, 3)).sort();
       return {
         title: `Expense report: ${employee}, ${purpose.toLowerCase()}`,
         values: [
-          text('purpose', `${purpose} in ${random.pick(['Vienna', 'Graz', 'Munich', 'Zurich', 'Berlin', 'Prague'])}`),
-          number('total', round2(random.int(1_500, 450_000) / 100)),
-          select('categories', picked.map((index) => optionValue(categories, index))),
+          textValue('purpose', `${purpose} in ${random.pick(['Vienna', 'Graz', 'Munich', 'Zurich', 'Berlin', 'Prague'])}`),
+          numberValue('total', round2(random.int(1_500, 450_000) / 100)),
+          selectValue('categories', pickOptions(random, form, 'categories', random.int(1, 3))),
         ],
       };
     },
@@ -260,19 +258,18 @@ export const processDefinitions: ProcessDefinition[] = [
       textField('employee', 'New employee', { required: true, maxLength: 80 }),
       dateField('startDate', 'Start date', { required: true, min: iso(today) }),
       selectField('equipment', 'Equipment', ['Laptop', 'Phone', 'Monitor', 'Headset', 'Access card'], { multiple: true }),
-      selectField('buddy', 'Onboarding buddy', ['Alex Berger', 'Jamie Novak', 'Morgan Fischer', 'Riley Weiss']),
+      selectField('buddy', 'Onboarding buddy', team.map((member) => member.displayName)),
       booleanField('accountsCreated', 'Accounts are set up', { required: true }),
       textField('notes', 'Notes', { multiline: true, maxLength: 1000 }),
     ],
-    seed(random, today, form) {
+    sampleTask(random, today, form) {
       const employee = person(random);
-      const equipment = field(form, 'equipment');
       return {
         title: `Onboarding: ${employee}`,
         values: [
-          text('employee', employee),
-          date('startDate', today + random.int(5, 40) * DAY),
-          select('equipment', [optionValue(equipment, 0), optionValue(equipment, 4)]),
+          textValue('employee', employee),
+          dateValue('startDate', today + random.int(5, 40) * DAY),
+          selectValue('equipment', pickOptions(random, form, 'equipment', random.int(1, 3))),
         ],
       };
     },
