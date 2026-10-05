@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push -u origin ticket/*)",
+      "Bash(git push origin ticket/*)",
+      "Bash(gh pr create *)"
+    ],
+    "deny": [
+      "Bash(git push * main)",
+      "Bash(git push * main:*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(gh pr merge*)"
+    ]
+  }
+}
