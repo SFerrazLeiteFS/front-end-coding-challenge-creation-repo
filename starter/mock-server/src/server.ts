@@ -3,11 +3,15 @@ import { createSchema, createYoga, type Plugin } from 'graphql-yoga';
 import { viewerFromAuthorization, type Viewer } from './auth.ts';
 import { systemClock, type Clock } from './clock.ts';
 import { defaultConfig, type MockConfig } from './config.ts';
+import { controlPlugin } from './control.ts';
+import { resolvers } from './resolvers.ts';
+import { createStore, type Store } from './store.ts';
 
 export interface MockContext {
   viewer: Viewer;
   config: MockConfig;
   clock: Clock;
+  store: Store;
 }
 
 export interface MockServerOptions {
@@ -16,9 +20,6 @@ export interface MockServerOptions {
 }
 
 const typeDefs = readFileSync(new URL('../../schema/schema.graphql', import.meta.url), 'utf8');
-
-/** Objects for interfaces and unions carry their concrete type name. */
-const resolveByTypename = { __resolveType: (value: { __typename: string }) => value.__typename };
 
 function authPlugin(): Plugin {
   return {
@@ -40,24 +41,17 @@ function authPlugin(): Plugin {
 export function createMockServer(options: MockServerOptions = {}) {
   const config: MockConfig = { ...defaultConfig, ...options.config };
   const clock = options.clock ?? systemClock;
+  const store = createStore(config, clock);
 
   const yoga = createYoga<{}, MockContext>({
-    schema: createSchema<MockContext>({
-      typeDefs,
-      resolvers: {
-        Query: {
-          viewer: (_parent, _args, context) => context.viewer,
-        },
-        FormField: resolveByTypename,
-        FieldValue: resolveByTypename,
-      },
-    }),
+    schema: createSchema<MockContext>({ typeDefs, resolvers }),
     context: ({ request }) => ({
       viewer: viewerFromAuthorization(request.headers.get('authorization'))!,
       config,
       clock,
+      store,
     }),
-    plugins: [authPlugin()],
+    plugins: [controlPlugin(store), authPlugin()],
     cors: {
       origin: config.corsOrigin,
       methods: ['GET', 'POST', 'OPTIONS'],
