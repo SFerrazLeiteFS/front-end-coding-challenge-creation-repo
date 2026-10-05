@@ -21,13 +21,13 @@ pnpm test    # builder tests against starter/mock-server
 ## Shipping the starter
 
 ```
-scripts/check-starter.sh <dir>             # forbidden terms and firestart hosts
-scripts/export-starter.sh [--force]        # starter/ from HEAD → one commit "Initial commit" → candidate repo
+node scripts/check-starter.mjs <dir>       # forbidden terms (also inside identifiers) and internal names
+scripts/export-starter.sh [--force]        # starter/ from main → one commit "Initial commit" → candidate repo
 scripts/package-zip.sh                     # ZIP from the candidate repo → dist/approval-inbox.zip
-scripts/package-zip.sh --from-head         # ZIP straight from starter/ in HEAD, without exporting
+scripts/package-zip.sh --from-ref main     # ZIP straight from starter/ on main, without exporting
 ```
 
-Only committed content is shipped. Check by hand before an export: `pnpm install && pnpm dev` in a fresh copy, both example pages.
+Only content committed on `main` is shipped (`--ref` to choose another ref). Check by hand before an export: `pnpm install && pnpm dev` in a fresh copy, both example pages.
 
 ## Contents
 

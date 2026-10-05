@@ -1,27 +1,32 @@
 #!/usr/bin/env bash
-# Exports starter/ (as committed in HEAD) as a single commit "Initial commit"
-# and pushes it to the candidate repo. Runs check-starter.sh first.
+# Exports starter/ (as committed on main) as a single commit "Initial commit"
+# and pushes it to the candidate repo. Runs the check first.
 #
-# Usage: scripts/export-starter.sh [--remote <url>] [--force] [--source <dir>]
+# Usage: scripts/export-starter.sh [--remote <url>] [--ref <ref>] [--force] [--source <dir>]
 #   --remote  target repository (default: the private org repo)
-#   --force   overwrite a target that already has commits (history stays one commit)
-#   --source  export this directory instead of starter/ from HEAD (for tests)
+#   --ref     export starter/ from this ref (default: main)
+#   --force   replace everything in a target that is not empty: one branch, one commit, no tags
+#   --source  export this directory instead (for tests)
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-remote="git@github.com:firestartorg/front-end-coding-challenge.git"
+source "$here/lib.sh"
+
+remote="$DEFAULT_REMOTE"
+ref="$DEFAULT_REF"
 force=0
-source=""
+source_dir=""
 MESSAGE="Initial commit"
-AUTHOR_NAME="FireStart"
-AUTHOR_EMAIL="s.ferraz-leite@firestart.com"
+AUTHOR="Approval Inbox"
+AUTHOR_EMAIL="approval-inbox@example.com"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --remote) remote="$2"; shift 2 ;;
+    --remote) remote="$(need_value "$@")"; shift 2 ;;
+    --ref) ref="$(need_value "$@")"; shift 2 ;;
+    --source) source_dir="$(need_value "$@")"; shift 2 ;;
     --force) force=1; shift ;;
-    --source) source="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -29,28 +34,30 @@ done
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-if [[ -n "$source" ]]; then
-  cp -R "$source/." "$work/"
+if [[ -n "$source_dir" ]]; then
+  cp -R "$source_dir/." "$work/"
 else
-  git -C "$repo" archive HEAD starter | tar -x -C "$work" --strip-components=1
+  extract_starter "$repo" "$ref" "$work"
 fi
 
-bash "$here/check-starter.sh" "$work" --message "$MESSAGE"
+node "$here/check-starter.mjs" "$work" --message "$MESSAGE"
 
-if [[ -n "$(git ls-remote --heads "$remote")" && $force -ne 1 ]]; then
-  echo "✗ $remote already has commits. Use --force to replace them with a single new commit." >&2
+existing="$(git ls-remote "$remote")" || { echo "✗ Cannot read $remote" >&2; exit 1; }
+if [[ -n "$existing" && $force -ne 1 ]]; then
+  echo "✗ $remote is not empty. Use --force to replace everything in it with a single new commit." >&2
   exit 1
 fi
 
 cd "$work"
 git init -q -b main
-git add -A
-GIT_AUTHOR_NAME="$AUTHOR_NAME" GIT_AUTHOR_EMAIL="$AUTHOR_EMAIL" \
-GIT_COMMITTER_NAME="$AUTHOR_NAME" GIT_COMMITTER_EMAIL="$AUTHOR_EMAIL" \
+git add -A -f
+GIT_AUTHOR_NAME="$AUTHOR" GIT_AUTHOR_EMAIL="$AUTHOR_EMAIL" \
+GIT_COMMITTER_NAME="$AUTHOR" GIT_COMMITTER_EMAIL="$AUTHOR_EMAIL" \
   git -c commit.gpgsign=false commit -q -m "$MESSAGE"
 if [[ $force -eq 1 ]]; then
-  git push -q --force "$remote" main
+  # --mirror also deletes branches and tags in the target that we don't have.
+  git push -q --force --mirror "$remote"
 else
   git push -q "$remote" main
 fi
-echo "Exported $(git rev-parse --short HEAD) to $remote"
+echo "Exported $(git rev-parse --short HEAD) from $ref to $remote"

@@ -1,10 +1,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const script = (name: string) => join(root, 'scripts', name);
 const temps: string[] = [];
 afterEach(() => {
@@ -18,7 +19,7 @@ function tempDir() {
 }
 
 function run(file: string, args: string[], cwd = root) {
-  const result = spawnSync('bash', [file, ...args], { cwd, encoding: 'utf8' });
+  const result = spawnSync(file.endsWith('.mjs') ? 'node' : 'bash', [file, ...args], { cwd, encoding: 'utf8' });
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
@@ -35,23 +36,26 @@ function cleanFixture() {
   const dir = tempDir();
   writeFileSync(join(dir, 'README.md'), '# Approval Inbox\n\nFireStart Cloud automates processes. Questions: s.ferraz-leite@firestart.com\n');
   mkdirSync(join(dir, 'src'));
-  writeFileSync(join(dir, 'src', 'bootstrap.ts'), '// Starts the app. Uses a scorecard-free setup.\nexport const ok = true;\n');
+  writeFileSync(
+    join(dir, 'src', 'bootstrap.ts'),
+    "// Starts the app. FireStart's setup, scorecard-free.\nexport const strapTrapeze = 'reassess-free';\n",
+  );
   return dir;
 }
 
-describe('check-starter.sh', () => {
+describe('check-starter.mjs', () => {
   it('passes the current starter', () => {
     const exported = tempDir();
     execFileSync('bash', ['-c', `git archive HEAD starter | tar -x -C "${exported}"`], { cwd: root });
 
-    const result = run(script('check-starter.sh'), [join(exported, 'starter')]);
+    const result = run(script('check-starter.mjs'), [join(exported, 'starter')]);
 
     expect(result.output).toContain('passed');
     expect(result.status).toBe(0);
   });
 
   it('passes a clean directory with the company name, the contact address and look-alike words', () => {
-    expect(run(script('check-starter.sh'), [cleanFixture()]).status).toBe(0);
+    expect(run(script('check-starter.mjs'), [cleanFixture()]).status).toBe(0);
   });
 
   it.each(['pitfall', 'Trap', 'GOTCHA', 'evaluation', 'Assessment', 'interviews', 'rubric', 'scoring'])(
@@ -60,38 +64,81 @@ describe('check-starter.sh', () => {
       const dir = cleanFixture();
       writeFileSync(join(dir, 'src', 'notes.ts'), `// This is a ${term} for later.\n`);
 
-      const result = run(script('check-starter.sh'), [dir]);
+      const result = run(script('check-starter.mjs'), [dir]);
 
       expect(result.status).not.toBe(0);
       expect(result.output).toContain('notes.ts');
     },
   );
 
+  it.each(['interviewMode', 'evaluation_id', 'isTrap', 'PITFALL_SEED', 'evaluatedAt'])('fails on the term inside the identifier %s', (identifier) => {
+    const dir = cleanFixture();
+    writeFileSync(join(dir, 'src', 'code.ts'), `export const ${identifier} = 1;\n`);
+
+    expect(run(script('check-starter.mjs'), [dir]).status).not.toBe(0);
+  });
+
+  it('allows the contact address in README.md in any case', () => {
+    const dir = cleanFixture();
+    writeFileSync(join(dir, 'README.md'), 'Write to S.Ferraz-Leite@FireStart.com.\n');
+
+    expect(run(script('check-starter.mjs'), [dir]).status).toBe(0);
+  });
+
+  it.each([
+    ['in another file', 'src/contact.ts', "export const mail = 's.ferraz-leite@firestart.com';\n"],
+    ['as part of a longer host', 'README.md', 'See xs.ferraz-leite@firestart.com.evil.io\n'],
+  ])('fails on the contact address %s', (_, file, content) => {
+    const dir = cleanFixture();
+    writeFileSync(join(dir, file), content);
+
+    expect(run(script('check-starter.mjs'), [dir]).status).not.toBe(0);
+  });
+
+  it('fails on a missing directory', () => {
+    expect(run(script('check-starter.mjs'), ['/nonexistent/dir']).status).toBe(2);
+  });
+
   it('fails on a term in a file name', () => {
     const dir = cleanFixture();
     writeFileSync(join(dir, 'src', 'interview-notes.md'), 'nothing here\n');
 
-    const result = run(script('check-starter.sh'), [dir]);
+    const result = run(script('check-starter.mjs'), [dir]);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain('interview-notes.md');
   });
 
-  it.each(['api.dev.firestart.cloud', 'https://firestart.example.com', 'someone.else@firestart.com', 'auth.firestart.io'])(
-    'fails on the host name %s',
+  it.each([
+    'api.dev.firestart.cloud',
+    'https://firestart.example.com',
+    'someone.else@firestart.com',
+    'auth.firestart.io',
+    'github.com/firestartorg/webapp',
+    '@firestart/shared',
+    'http://firestart:4000',
+  ])(
+    'fails on the internal name %s',
     (host) => {
       const dir = cleanFixture();
       writeFileSync(join(dir, 'src', 'config.ts'), `export const url = '${host}';\n`);
 
-      const result = run(script('check-starter.sh'), [dir]);
+      const result = run(script('check-starter.mjs'), [dir]);
 
       expect(result.status).not.toBe(0);
       expect(result.output).toContain('config.ts');
     },
   );
 
+  it('fails on firestart in a file name', () => {
+    const dir = cleanFixture();
+    writeFileSync(join(dir, 'firestart-logo.svg'), '<svg/>');
+
+    expect(run(script('check-starter.mjs'), [dir]).status).not.toBe(0);
+  });
+
   it('fails on a commit message passed for checking', () => {
-    const result = run(script('check-starter.sh'), [cleanFixture(), '--message', 'Add interview hooks']);
+    const result = run(script('check-starter.mjs'), [cleanFixture(), '--message', 'Add interview hooks']);
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain('commit message');
@@ -127,6 +174,35 @@ describe('export-starter.sh', () => {
     expect(git(remote, 'rev-list', '--count', 'main')).toBe('1');
   });
 
+  it('replaces other branches and tags when forced', () => {
+    const remote = bareRepo();
+    run(script('export-starter.sh'), ['--remote', remote]);
+    git(remote, 'branch', 'old', 'main');
+    git(remote, 'tag', 'v0', 'main');
+
+    const forced = run(script('export-starter.sh'), ['--remote', remote, '--force']);
+
+    expect(forced.status, forced.output).toBe(0);
+    expect(git(remote, 'for-each-ref', '--format=%(refname)')).toBe('refs/heads/main');
+    expect(git(remote, 'rev-list', '--all', '--count')).toBe('1');
+  });
+
+  it('treats a target with only tags as not empty', () => {
+    const remote = bareRepo();
+    run(script('export-starter.sh'), ['--remote', remote]);
+    git(remote, 'tag', 'keep', 'main');
+    git(remote, 'update-ref', '-d', 'refs/heads/main');
+
+    expect(run(script('export-starter.sh'), ['--remote', remote]).status).not.toBe(0);
+  });
+
+  it('uses a neutral author for the commit', () => {
+    const remote = bareRepo();
+    run(script('export-starter.sh'), ['--remote', remote]);
+
+    expect(git(remote, 'log', '-1', '--format=%an <%ae> / %cn <%ce>', 'main')).not.toMatch(/firestart/i);
+  });
+
   it('does not push when the check fails', () => {
     const remote = bareRepo();
     const source = tempDir();
@@ -158,14 +234,21 @@ describe('package-zip.sh', () => {
     expect(entries.some((entry) => entry.includes('node_modules') || entry.includes('/.git/'))).toBe(false);
   });
 
-  it('packages the committed starter directly', () => {
+  it('packages the starter committed on a ref directly', () => {
     const zip = join(tempDir(), 'approval-inbox.zip');
 
-    const result = run(script('package-zip.sh'), ['--from-head', '--out', zip]);
+    const result = run(script('package-zip.sh'), ['--from-ref', 'main', '--out', zip]);
 
     expect(result.status, result.output).toBe(0);
     expect(existsSync(zip)).toBe(true);
     const readme = execFileSync('unzip', ['-p', zip, 'approval-inbox/README.md'], { encoding: 'utf8' });
-    expect(readme).toBe(readFileSync(join(root, 'starter', 'README.md'), 'utf8'));
+    expect(readme).toBe(git(root, 'show', 'main:starter/README.md') + '\n');
+  });
+
+  it('explains a missing flag value', () => {
+    const result = run(script('package-zip.sh'), ['--out']);
+
+    expect(result.status).toBe(2);
+    expect(result.output).toContain('--out needs a value');
   });
 });
