@@ -37,13 +37,15 @@ async function allPages(gql: Gql, variables: Record<string, unknown> = {}) {
 
 const ms = (iso: string | null) => (iso === null ? null : Date.parse(iso));
 const rank = { LOW: 0, NORMAL: 1, HIGH: 2, URGENT: 3 } as Record<string, number>;
+/** Plain code-unit order, as the mock uses. */
+const byId = (a: Node, b: Node) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /** Negative if a comes first. */
 const orders: Record<string, (a: Node, b: Node) => number> = {
-  DUE_ASC: (a, b) => nullsLast(ms(a.dueAt), ms(b.dueAt), (x, y) => x - y) || a.id.localeCompare(b.id),
-  DUE_DESC: (a, b) => nullsLast(ms(a.dueAt), ms(b.dueAt), (x, y) => y - x) || a.id.localeCompare(b.id),
-  CREATED_DESC: (a, b) => ms(b.createdAt)! - ms(a.createdAt)! || a.id.localeCompare(b.id),
-  PRIORITY_DESC: (a, b) => rank[b.priority]! - rank[a.priority]! || a.id.localeCompare(b.id),
+  DUE_ASC: (a, b) => nullsLast(ms(a.dueAt), ms(b.dueAt), (x, y) => x - y) || byId(a, b),
+  DUE_DESC: (a, b) => nullsLast(ms(a.dueAt), ms(b.dueAt), (x, y) => y - x) || byId(a, b),
+  CREATED_DESC: (a, b) => ms(b.createdAt)! - ms(a.createdAt)! || byId(a, b),
+  PRIORITY_DESC: (a, b) => rank[b.priority]! - rank[a.priority]! || byId(a, b),
 };
 function nullsLast(a: number | null, b: number | null, compare: (a: number, b: number) => number) {
   if (a === null && b === null) return 0;
@@ -166,6 +168,25 @@ describe('filters', () => {
     expect(nodes.map((node) => node.id).sort()).toEqual(expected.map((node) => node.id).sort());
   });
 
+  it.each(['2026', 'Tuesday 1 Jan 2026', '2026-02-30T00:00:00Z', '2026-03-10'])(
+    'rejects dueBefore %s with VALIDATION_FAILED',
+    async (dueBefore) => {
+      const { gql } = setup();
+
+      const body = await page(gql, { filter: { dueBefore } });
+
+      expect(body.errors[0].extensions).toMatchObject({ code: 'VALIDATION_FAILED', fieldErrors: [{ key: 'dueBefore' }] });
+    },
+  );
+
+  it('accepts dueBefore with a time zone offset', async () => {
+    const { gql } = setup();
+
+    const body = await page(gql, { filter: { dueBefore: '2026-03-10T18:00:00+01:00' } });
+
+    expect(body.errors).toBeUndefined();
+  });
+
   it('returns an empty page for an unknown process', async () => {
     const { gql } = setup();
 
@@ -221,12 +242,26 @@ describe('cursors', () => {
     expect(body.errors).toBeUndefined();
   });
 
-  it.each(['garbage', btoa('{"not":"a cursor"}')])('rejects a malformed cursor %s', async (after) => {
+  it.each([
+    ['garbage', 'garbage'],
+    ['without the expected fields', btoa('{"not":"a cursor"}')],
+    ['with an empty sort key', btoa(JSON.stringify({ key: [], fingerprint: 'x', issuedAt: 0 }))],
+  ])('rejects a malformed cursor (%s)', async (_, after) => {
     const { gql } = setup();
 
     const body = await page(gql, { first: 5, after });
 
     expect(body.errors[0].extensions.code).toBe('BAD_CURSOR');
+  });
+
+  it('rejects a cursor issued in the future', async () => {
+    const { gql } = setup();
+    const after = await firstCursor(gql);
+    const data = JSON.parse(atob(after));
+
+    const forged = btoa(JSON.stringify({ ...data, issuedAt: data.issuedAt + 60_000 }));
+
+    expect((await page(gql, { first: 5, after: forged })).errors[0].extensions.code).toBe('BAD_CURSOR');
   });
 
   it('expires a cursor after 10 minutes', async () => {

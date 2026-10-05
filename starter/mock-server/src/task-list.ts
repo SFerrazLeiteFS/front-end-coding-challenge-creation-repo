@@ -1,6 +1,7 @@
 import type { Clock } from './clock.ts';
 import { mockError } from './errors.ts';
 import type { Priority, Task, TaskStatus } from './model.ts';
+import { MINUTE, parseDateTime } from './time.ts';
 
 export type TaskSort = 'DUE_ASC' | 'DUE_DESC' | 'CREATED_DESC' | 'PRIORITY_DESC';
 
@@ -21,16 +22,20 @@ export interface TaskListArgs {
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
-const CURSOR_LIFETIME_MS = 10 * 60 * 1000;
+const CURSOR_LIFETIME_MS = 10 * MINUTE;
 
 const priorityRank: Record<Priority, number> = { LOW: 0, NORMAL: 1, HIGH: 2, URGENT: 3 };
 
-/** Position of a task in a sort order. Compared element by element; the task ID breaks ties. */
+/** Position of a task in a sort order, compared element by element. The task ID always comes last and breaks ties. */
 type SortKey = (number | string)[];
 
+/** Tasks without a due date get the group 1 and so come after all tasks with one. */
+const byDueDate = (direction: 1 | -1) => (task: Task): SortKey =>
+  task.dueAt ? [0, direction * Date.parse(task.dueAt), task.id] : [1, 0, task.id];
+
 const sortKeys: Record<TaskSort, (task: Task) => SortKey> = {
-  DUE_ASC: (task) => (task.dueAt ? [0, Date.parse(task.dueAt), task.id] : [1, 0, task.id]),
-  DUE_DESC: (task) => (task.dueAt ? [0, -Date.parse(task.dueAt), task.id] : [1, 0, task.id]),
+  DUE_ASC: byDueDate(1),
+  DUE_DESC: byDueDate(-1),
   CREATED_DESC: (task) => [-Date.parse(task.createdAt), task.id],
   PRIORITY_DESC: (task) => [-priorityRank[task.priority], task.id],
 };
@@ -43,21 +48,47 @@ function compareKeys(a: SortKey, b: SortKey) {
   return 0;
 }
 
-/** Same filter and sort, written in any order, give the same string. */
-function normalize(filter: TaskFilter | null | undefined, sort: TaskSort) {
-  const list = (values?: string[] | null) => (values?.length ? [...new Set(values)].sort() : null);
-  return JSON.stringify({
-    status: list(filter?.status),
-    priority: list(filter?.priority),
-    processId: filter?.processId ?? null,
-    search: filter?.search?.trim().toLowerCase() || null,
-    dueBefore: filter?.dueBefore ? Date.parse(filter.dueBefore) : null,
-    sort,
-  });
+/** The filter as it is applied: empty values removed, lists deduplicated and sorted, dates parsed. */
+interface NormalizedFilter {
+  status: TaskStatus[] | null;
+  priority: Priority[] | null;
+  processId: string | null;
+  search: string | null;
+  dueBefore: number | null;
 }
 
-/** FNV-1a, as hex. */
-function hash(text: string) {
+function normalizeFilter(filter: TaskFilter | null | undefined): NormalizedFilter {
+  const list = <T extends string>(values?: T[] | null) => (values?.length ? [...new Set(values)].sort() : null);
+  let dueBefore: number | null = null;
+  if (filter?.dueBefore) {
+    dueBefore = parseDateTime(filter.dueBefore);
+    if (dueBefore === null) {
+      throw mockError('VALIDATION_FAILED', '`filter.dueBefore` is not a valid date-time.', {
+        fieldErrors: [{ key: 'dueBefore', message: 'Expected an ISO 8601 date-time, e.g. 2026-03-10T17:00:00Z.' }],
+      });
+    }
+  }
+  return {
+    status: list(filter?.status),
+    priority: list(filter?.priority),
+    processId: filter?.processId || null,
+    search: filter?.search ? filter.search.toLowerCase() : null,
+    dueBefore,
+  };
+}
+
+function matches(task: Task, filter: NormalizedFilter) {
+  if (filter.status && !filter.status.includes(task.status)) return false;
+  if (filter.priority && !filter.priority.includes(task.priority)) return false;
+  if (filter.processId && task.processId !== filter.processId) return false;
+  if (filter.search && !task.title.toLowerCase().includes(filter.search)) return false;
+  if (filter.dueBefore !== null && (task.dueAt === null || Date.parse(task.dueAt) >= filter.dueBefore)) return false;
+  return true;
+}
+
+/** Short fingerprint (FNV-1a) of filter and sort. A cursor is only valid for the fingerprint it was issued for. */
+function fingerprint(filter: NormalizedFilter, sort: TaskSort) {
+  const text = JSON.stringify({ filter, sort });
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);
@@ -66,33 +97,30 @@ function hash(text: string) {
   return (h >>> 0).toString(16);
 }
 
-interface CursorData {
+interface Cursor {
   key: SortKey;
-  query: string;
+  fingerprint: string;
   issuedAt: number;
 }
 
-const encodeCursor = (data: CursorData) => Buffer.from(JSON.stringify(data)).toString('base64');
+const encodeCursor = (cursor: Cursor) => Buffer.from(JSON.stringify(cursor)).toString('base64');
 
-function decodeCursor(cursor: string): CursorData {
+function decodeCursor(value: string, sort: TaskSort): Cursor {
+  let cursor: Partial<Cursor> | undefined;
   try {
-    const data = JSON.parse(Buffer.from(cursor, 'base64').toString('utf8'));
-    if (Array.isArray(data.key) && typeof data.query === 'string' && typeof data.issuedAt === 'number') return data;
+    cursor = JSON.parse(Buffer.from(value, 'base64').toString('utf8'));
   } catch {
-    // fall through
+    cursor = undefined;
   }
-  throw mockError('BAD_CURSOR', 'The cursor is not valid.');
-}
-
-function matches(task: Task, filter: TaskFilter | null | undefined, dueBefore: number | null) {
-  if (!filter) return true;
-  if (filter.status?.length && !filter.status.includes(task.status)) return false;
-  if (filter.priority?.length && !filter.priority.includes(task.priority)) return false;
-  if (filter.processId && task.processId !== filter.processId) return false;
-  const search = filter.search?.trim().toLowerCase();
-  if (search && !task.title.toLowerCase().includes(search)) return false;
-  if (dueBefore !== null && (task.dueAt === null || Date.parse(task.dueAt) >= dueBefore)) return false;
-  return true;
+  const keyLength = sort.startsWith('DUE') ? 3 : 2;
+  const validKey =
+    Array.isArray(cursor?.key) &&
+    cursor.key.length === keyLength &&
+    cursor.key.every((part) => typeof part === 'number' || typeof part === 'string');
+  if (!validKey || typeof cursor?.fingerprint !== 'string' || typeof cursor.issuedAt !== 'number') {
+    throw mockError('BAD_CURSOR', 'The cursor is not valid.');
+  }
+  return cursor as Cursor;
 }
 
 export function listTasks(tasks: Iterable<Task>, args: TaskListArgs, clock: Clock) {
@@ -104,42 +132,36 @@ export function listTasks(tasks: Iterable<Task>, args: TaskListArgs, clock: Cloc
     });
   }
   const pageSize = Math.min(first, MAX_PAGE_SIZE);
+  const filter = normalizeFilter(args.filter);
+  const currentFingerprint = fingerprint(filter, sort);
+  const now = clock.now();
 
-  let dueBefore: number | null = null;
-  if (args.filter?.dueBefore) {
-    dueBefore = Date.parse(args.filter.dueBefore);
-    if (Number.isNaN(dueBefore)) {
-      throw mockError('VALIDATION_FAILED', '`filter.dueBefore` is not a valid date-time.', {
-        fieldErrors: [{ key: 'dueBefore', message: 'Not a valid date-time.' }],
-      });
-    }
-  }
-
-  const query = hash(normalize(args.filter, sort));
   let afterKey: SortKey | null = null;
   if (args.after) {
-    const cursor = decodeCursor(args.after);
-    if (cursor.query !== query) throw mockError('BAD_CURSOR', 'The cursor belongs to a different filter or sort.');
-    if (clock.now() - cursor.issuedAt > CURSOR_LIFETIME_MS) throw mockError('BAD_CURSOR', 'The cursor has expired.');
+    const cursor = decodeCursor(args.after, sort);
+    if (cursor.fingerprint !== currentFingerprint) {
+      throw mockError('BAD_CURSOR', 'The cursor belongs to a different filter or sort.');
+    }
+    const age = now - cursor.issuedAt;
+    if (age < 0 || age > CURSOR_LIFETIME_MS) throw mockError('BAD_CURSOR', 'The cursor has expired.');
     afterKey = cursor.key;
   }
 
   const keyOf = sortKeys[sort];
-  const sorted = [...tasks]
-    .filter((task) => matches(task, args.filter, dueBefore))
+  const remaining = [...tasks]
+    .filter((task) => matches(task, filter))
     .map((task) => ({ task, key: keyOf(task) }))
     .filter(({ key }) => afterKey === null || compareKeys(key, afterKey) > 0)
     .sort((a, b) => compareKeys(a.key, b.key));
 
-  const issuedAt = clock.now();
-  const edges = sorted.slice(0, pageSize).map(({ task, key }) => ({
-    cursor: encodeCursor({ key, query, issuedAt }),
+  const edges = remaining.slice(0, pageSize).map(({ task, key }) => ({
+    cursor: encodeCursor({ key, fingerprint: currentFingerprint, issuedAt: now }),
     node: task,
   }));
 
   return {
     edges,
     nodes: edges.map((edge) => edge.node),
-    pageInfo: { hasNextPage: sorted.length > pageSize, endCursor: edges.at(-1)?.cursor ?? null },
+    pageInfo: { hasNextPage: remaining.length > pageSize, endCursor: edges.at(-1)?.cursor ?? null },
   };
 }

@@ -150,7 +150,7 @@ Errors arrive in the `errors` array with `extensions.code` (always lowercase key
 | `NOT_FOUND` | `completeTask` on a removed task | |
 | `CONFLICT` | `expectedVersion` does not match the current version | `currentVersion` |
 | `FAILED_PRECONDITION` | task is no longer `OPEN`/`IN_PROGRESS` | `currentStatus` |
-| `VALIDATION_FAILED` | any validation rule above, `first < 1` | `fieldErrors: [{ key, message }]` (for field rules) |
+| `VALIDATION_FAILED` | any validation rule above, `first < 1`, invalid `dueBefore` | `fieldErrors: [{ key, message }]` (for field rules) |
 | `BAD_CURSOR` | cursor belongs to a different filter/sort or is older than 10 min | |
 | `INTERNAL` | simulated server error, whole operation or single field | |
 
