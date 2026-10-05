@@ -1,0 +1,5 @@
+packages:
+  - mock-server
+  - apps/*
+allowBuilds:
+  esbuild: true

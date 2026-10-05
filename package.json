@@ -1,0 +1,16 @@
+{
+  "name": "fe-takehome-builder",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "scripts": {
+    "setup": "pnpm --dir starter install && pnpm install",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tests && pnpm --dir starter --filter mock-server typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

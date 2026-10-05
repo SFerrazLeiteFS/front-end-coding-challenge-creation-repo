@@ -4,7 +4,7 @@ Source: `specs/spec.md` v1. Status values: see `docs/agents/triage-labels.md`.
 
 | # | Ticket | Blocked by | Status |
 |---|---|---|---|
-| 01 | [Mock walking skeleton](01-mock-walking-skeleton.md) | – | ready-for-agent |
+| 01 | [Mock walking skeleton](01-mock-walking-skeleton.md) | – | done |
 | 02 | [Web scaffold](02-web-scaffold.md) | 01 | ready-for-agent |
 | 03 | [Seed data, task detail and form schemas](03-seed-data-and-task-detail.md) | 01 | ready-for-agent |
 | 04 | [Task list with filters, sorting and pagination](04-task-list.md) | 03 | ready-for-agent |
