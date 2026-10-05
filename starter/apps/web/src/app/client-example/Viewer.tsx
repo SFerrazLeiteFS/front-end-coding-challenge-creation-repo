@@ -10,7 +10,5 @@ export function Viewer() {
 
   return result.data ? (
     <SignedInAs name={result.data.viewer.displayName} />
-  ) : (
-    <p>{result.error?.message}</p>
-  );
+  ) : null;
 }

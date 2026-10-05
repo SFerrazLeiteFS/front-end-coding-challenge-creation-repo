@@ -10,11 +10,7 @@ export default async function HomePage() {
   return (
     <main>
       <h1>Approval Inbox</h1>
-      {result.data ? (
-        <SignedInAs name={result.data.viewer.displayName} />
-      ) : (
-        <p>{result.error?.message}</p>
-      )}
+      {result.data && <SignedInAs name={result.data.viewer.displayName} />}
       <Link href="/client-example">Client Component example</Link>
     </main>
   );

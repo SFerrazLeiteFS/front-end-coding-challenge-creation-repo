@@ -1,7 +1,7 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Don't generate AGENTS.md / CLAUDE.md on `next dev`.
+  // Keep `next dev` from adding generated files to the project.
   agentRules: false,
 };
 
