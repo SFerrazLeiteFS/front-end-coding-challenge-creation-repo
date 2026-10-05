@@ -1,4 +1,4 @@
-import type { FieldValue, FormField } from './model.ts';
+import type { Decision, FieldValue, FormField } from './model.ts';
 import { parseDateTime } from './time.ts';
 
 /** One entry of `CompleteTaskInput.values`. Exactly one of the value fields must be set. */
@@ -9,7 +9,7 @@ export interface FieldValueInput {
   date?: string | null;
   selected?: string[] | null;
   bool?: boolean | null;
-  decision?: string | null;
+  decision?: Decision | null;
 }
 
 export interface FieldError {
@@ -29,9 +29,16 @@ const kindOf: Record<FormField['__typename'], ValueKind> = {
 };
 const valueKinds = Object.values(kindOf);
 
-/** Tolerance for floating-point rounding when checking `step`, e.g. 533.54 with step 0.01. */
+/** Tolerance for floating-point rounding when checking `step`. */
 const STEP_TOLERANCE = 1e-6;
 
+export const messages = {
+  required: 'Required.',
+  mustBeChecked: 'Must be checked.',
+  dateTime: 'Expected an ISO 8601 date-time, e.g. 2026-03-10T17:00:00Z.',
+};
+
+/** Empty text (also text of only spaces) and an empty selection count as no value. */
 function isMissing(field: FormField, input: FieldValueInput | undefined) {
   if (!input) return true;
   if (field.__typename === 'TextField') return !input.text?.trim();
@@ -46,7 +53,7 @@ function checkValue(field: FormField, input: FieldValueInput): string | null {
       const text = input.text!;
       if (field.maxLength !== null && text.length > field.maxLength) return `At most ${field.maxLength} characters.`;
       if (field.pattern !== null && text !== '' && !new RegExp(`^(?:${field.pattern})$`).test(text)) {
-        return `Does not match the expected format.`;
+        return 'Does not match the expected format.';
       }
       return null;
     }
@@ -62,7 +69,7 @@ function checkValue(field: FormField, input: FieldValueInput): string | null {
     }
     case 'DateField': {
       const value = parseDateTime(input.date!);
-      if (value === null) return 'Expected an ISO 8601 date-time, e.g. 2026-03-10T17:00:00Z.';
+      if (value === null) return messages.dateTime;
       if (field.min !== null && value < Date.parse(field.min)) return `Must not be before ${field.min}.`;
       if (field.max !== null && value > Date.parse(field.max)) return `Must not be after ${field.max}.`;
       return null;
@@ -73,16 +80,17 @@ function checkValue(field: FormField, input: FieldValueInput): string | null {
       const unknown = selected.filter((value) => !options.has(value));
       if (unknown.length) return `Unknown option: ${unknown.join(', ')}.`;
       if (!field.multiple && selected.length > 1) return 'Choose only one option.';
+      if (new Set(selected).size !== selected.length) return 'Each option can be chosen only once.';
       return null;
     }
     case 'BooleanField':
-      return field.required && input.bool !== true ? 'Must be checked.' : null;
+      return field.required && input.bool !== true ? messages.mustBeChecked : null;
     case 'DecisionField':
-      return field.allowed.includes(input.decision as never) ? null : `Must be one of ${field.allowed.join(', ')}.`;
+      return field.allowed.includes(input.decision!) ? null : `Must be one of ${field.allowed.join(', ')}.`;
   }
 }
 
-/** Checks submitted values against the form. Returns one error per field that breaks a rule, all at once. */
+/** Checks submitted values against the form. Returns one error for each invalid field. */
 export function validateValues(fields: FormField[], inputs: FieldValueInput[]): FieldError[] {
   const errors = new Map<string, string>();
   const report = (key: string, message: string) => {
@@ -111,7 +119,7 @@ export function validateValues(fields: FormField[], inputs: FieldValueInput[]): 
       continue;
     }
     if (field.__typename === 'DateField' && typeof input.date !== 'string') {
-      report(input.key, 'Expected an ISO 8601 date-time, e.g. 2026-03-10T17:00:00Z.');
+      report(input.key, messages.dateTime);
       continue;
     }
     inputsByKey.set(input.key, input);
@@ -121,7 +129,7 @@ export function validateValues(fields: FormField[], inputs: FieldValueInput[]): 
     const input = inputsByKey.get(field.key);
     if (errors.has(field.key)) continue;
     if (field.required && isMissing(field, input)) {
-      report(field.key, field.__typename === 'BooleanField' ? 'Must be checked.' : 'Required.');
+      report(field.key, field.__typename === 'BooleanField' ? messages.mustBeChecked : messages.required);
       continue;
     }
     if (!input || isMissing(field, input)) continue;
@@ -132,7 +140,7 @@ export function validateValues(fields: FormField[], inputs: FieldValueInput[]): 
   for (const field of fields) {
     if (field.__typename !== 'DecisionField') continue;
     const decision = inputsByKey.get(field.key)?.decision;
-    if (!decision || !field.commentRequiredFor.includes(decision as never)) continue;
+    if (!decision || !field.allowed.includes(decision) || !field.commentRequiredFor.includes(decision)) continue;
     const comment = fieldsByKey.get(field.commentFieldKey);
     if (comment && isMissing(comment, inputsByKey.get(field.commentFieldKey))) {
       report(field.commentFieldKey, `Required when the decision is ${decision}.`);
@@ -142,13 +150,15 @@ export function validateValues(fields: FormField[], inputs: FieldValueInput[]): 
   return [...errors].map(([key, message]) => ({ key, message }));
 }
 
-/** Converts validated inputs into stored values. */
+/** Converts validated inputs into stored values. Empty values are not stored. */
 export function toFieldValues(fields: FormField[], inputs: FieldValueInput[]): FieldValue[] {
+  const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
   return inputs.flatMap((input): FieldValue[] => {
-    const field = fields.find((f) => f.key === input.key)!;
+    const field = fieldsByKey.get(input.key)!;
+    if (isMissing(field, input)) return [];
     switch (field.__typename) {
       case 'TextField':
-        return input.text ? [{ __typename: 'TextValue', key: input.key, text: input.text }] : [];
+        return [{ __typename: 'TextValue', key: input.key, text: input.text! }];
       case 'NumberField':
         return [{ __typename: 'NumberValue', key: input.key, number: input.number! }];
       case 'DateField':
@@ -158,7 +168,7 @@ export function toFieldValues(fields: FormField[], inputs: FieldValueInput[]): F
       case 'BooleanField':
         return [{ __typename: 'BooleanValue', key: input.key, bool: input.bool! }];
       case 'DecisionField':
-        return [{ __typename: 'DecisionValue', key: input.key, decision: input.decision as never }];
+        return [{ __typename: 'DecisionValue', key: input.key, decision: input.decision! }];
     }
   });
 }

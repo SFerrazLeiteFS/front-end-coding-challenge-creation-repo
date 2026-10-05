@@ -1,7 +1,5 @@
-import type { Viewer } from './auth.ts';
-import type { Clock } from './clock.ts';
 import { mockError } from './errors.ts';
-import type { Store } from './store.ts';
+import type { MockContext } from './server.ts';
 import { iso } from './time.ts';
 import { toFieldValues, validateValues, type FieldValueInput } from './validation.ts';
 
@@ -11,7 +9,11 @@ export interface CompleteTaskInput {
   values: FieldValueInput[];
 }
 
-export function completeTask(input: CompleteTaskInput, { store, viewer, clock }: { store: Store; viewer: Viewer; clock: Clock }) {
+/** Completes a task for the viewer. Values not sent are not kept, including prefilled ones. */
+export function completeTask(
+  input: CompleteTaskInput,
+  { store, viewer, clock }: Pick<MockContext, 'store' | 'viewer' | 'clock'>,
+) {
   const task = store.data.tasks.get(input.taskId);
   if (!task) throw mockError('NOT_FOUND', `Task ${input.taskId} does not exist.`);
   if (task.status !== 'OPEN' && task.status !== 'IN_PROGRESS') {

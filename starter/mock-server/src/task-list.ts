@@ -2,6 +2,7 @@ import type { Clock } from './clock.ts';
 import { mockError } from './errors.ts';
 import type { Priority, Task, TaskStatus } from './model.ts';
 import { MINUTE, parseDateTime } from './time.ts';
+import { messages } from './validation.ts';
 
 export type TaskSort = 'DUE_ASC' | 'DUE_DESC' | 'CREATED_DESC' | 'PRIORITY_DESC';
 
@@ -64,7 +65,7 @@ function normalizeFilter(filter: TaskFilter | null | undefined): NormalizedFilte
     dueBefore = parseDateTime(filter.dueBefore);
     if (dueBefore === null) {
       throw mockError('VALIDATION_FAILED', '`filter.dueBefore` is not a valid date-time.', {
-        fieldErrors: [{ key: 'dueBefore', message: 'Expected an ISO 8601 date-time, e.g. 2026-03-10T17:00:00Z.' }],
+        fieldErrors: [{ key: 'dueBefore', message: messages.dateTime }],
       });
     }
   }

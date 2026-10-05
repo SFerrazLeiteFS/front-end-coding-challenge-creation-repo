@@ -356,4 +356,50 @@ describe('validation', () => {
 
     await expectFieldErrors(body, [key]);
   });
+
+  it('does not store an optional text of only spaces', async () => {
+    const { gql } = setup();
+    const task = await findTask(gql, 'process-invoice');
+    const values = replace(validValues(task.form.fields, 'APPROVE'), 'comment', { text: '   ' });
+
+    expect((await complete(gql, task.id, task.version, values)).errors).toBeUndefined();
+    const stored = (await gql(TASK, { id: task.id })).body.data.task.values;
+    expect(stored.find((value: any) => value.key === 'comment')).toBeUndefined();
+  });
+
+  it('rejects the same option twice in a multiple select', async () => {
+    const { gql } = setup();
+    const task = await findTask(gql, 'process-contract');
+    const values = replace(validValues(task.form.fields), 'reviewedClauses', { selected: ['liability', 'liability'] });
+
+    await expectFieldErrors(await complete(gql, task.id, task.version, values), ['reviewedClauses']);
+  });
+
+  it('reports only the decision when it is not allowed, even if it would need a comment', async () => {
+    const { gql } = setup();
+    const task = await findTask(gql, 'process-purchase');
+    const values = without(validValues(task.form.fields, 'RETURN'), 'comment');
+
+    await expectFieldErrors(await complete(gql, task.id, task.version, values), ['decision']);
+  });
+});
+
+describe('request errors', () => {
+  it('gives a variable of the wrong type the code BAD_REQUEST', async () => {
+    const { gql } = setup();
+
+    const { response, body } = await gql(COMPLETE, {
+      input: { taskId: 'task-0001', expectedVersion: 1, values: [{ key: 'amount', text: 5 }] },
+    });
+
+    expect(response.status).toBe(400);
+    expect(body.errors![0]!.extensions!.code).toBe('BAD_REQUEST');
+  });
+
+  it('keeps the codes for documents that do not parse or do not match the schema', async () => {
+    const { gql } = setup();
+
+    expect((await gql('{ viewer {')).body.errors![0]!.extensions!.code).toBe('GRAPHQL_PARSE_FAILED');
+    expect((await gql('{ nope }')).body.errors![0]!.extensions!.code).toBe('GRAPHQL_VALIDATION_FAILED');
+  });
 });
