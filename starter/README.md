@@ -44,3 +44,27 @@ Within one week, as a link to a private repo (with access for the address in you
 In the follow-up conversation (about 60 minutes) you briefly walk us through your solution. Then we extend it together: 40 minutes of pairing on your code, with a change we only show you during the session. You work on your own machine with your usual tools. At the end there's time for your questions to us.
 
 If you have questions about the assignment, reach out to s.ferraz-leite@firestart.com at any time.
+
+## Getting started
+
+You need Node.js 24 or later and pnpm 12. With Corepack (`corepack enable`), the right pnpm version is picked up from `package.json`.
+
+```sh
+pnpm install
+pnpm dev
+```
+
+This starts:
+
+- the web app on http://localhost:3000
+- the GraphQL mock server on http://localhost:4000/graphql (open it in a browser for GraphiQL)
+
+The web app sends the bearer token from `apps/web/.env` (`NEXT_PUBLIC_API_TOKEN`). The token determines who you are signed in as; see `mock-server/README.md`.
+
+Other scripts in the root:
+
+| Script | What it does |
+|---|---|
+| `pnpm test` | runs the tests (Vitest) |
+| `pnpm codegen` | regenerates the typed GraphQL documents in `apps/web/src/gql` from the schema |
+| `pnpm mock` | starts only the mock server |
