@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@whatwg-node/server": "^0.11.0",
     "graphql": "^17.0.2",
     "graphql-yoga": "^5.24.1"
   },

@@ -125,7 +125,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - graphql-yoga, TypeScript, run directly via `tsx` without a build step. Separate Node process on port 4000 (configurable), path `/graphql`, CORS allowing the web app origin on port 3000.
 - Built through one factory that takes configuration (seed, rates, latency, chaos on/off, task count) and a clock, and returns a fetch-style handler. The CLI entry wraps it in an HTTP server. Tests use the factory directly.
 - All state in memory. Restart or reset restores the seeded data set.
-- Realistic conditions (latency, unavailability, internal errors, partial data, lost responses) are applied centrally in a plugin layer, not in resolvers.
+- Realistic conditions are decided per request in one place (`conditions`). HTTP-level effects (latency, 503, whole-operation `INTERNAL`, replacing a saved completion's response with 503, abort logging) live in one HTTP layer in front of graphql-yoga; the two field- and mutation-level effects (a failing `assignee`, conflict/validation triggers on `completeTask`) are read by the resolvers. Requests without a valid token skip all of this and always get 401.
 - Defaults: latency 300 to 1500 ms uniform, 5 % HTTP 503, 2 % internal error for the whole operation, 3 % of `assignee` resolvers return null plus an error with path, 2 % of completions persist but respond 503, simulated colleague every 8 s, 250 tasks (max 10,000).
 - One switch disables latency, all failure injection and the simulated colleague. With it off, responses are stable and immediate.
 - Randomness: the data set is derived from the seed and the current UTC day. All dates (created, due, prefilled dates, date limits in forms) are relative to the start of that day, so the data looks current and stays identical all day; a reset on another day shifts the dates but keeps everything else. Behaviours are tested via rates of 0 or 1 and on-demand triggers, never by luck. Intermediate rates are reproducible only for sequential requests with the same seed; this is the documented limit.
@@ -135,9 +135,9 @@ The mock documents only what a candidate needs to work (start, token, switching 
 ### Control endpoints (in code, not in candidate docs)
 
 - Reset to the seed.
-- Change rates and latency at runtime (same keys as the environment variables).
+- Change rates, latency and the realistic-conditions switch at runtime (same keys as the environment variables; start-only keys are rejected).
 - Bump a task's version immediately.
-- Next-request trigger: applies one behaviour to the next request, optionally filtered by operation name. Behaviours: unavailable (503), internal, partial, lost-response, slow (with duration), conflict, validation.
+- Next-request trigger: applies one behaviour to the next request, optionally filtered by operation name or root field. Behaviours: unavailable (503), internal, partial, lost-response, slow (with duration), conflict, validation. The last three only apply to `completeTask` and wait for the next completion. Reset also drops pending triggers and restarts the random sequence.
 - All are named and commented neutrally ("useful for testing").
 
 ### Auth
@@ -275,4 +275,4 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Research findings with evidence: `specs/research.md` (builder repo only).
 - Our webapp does not distinguish network from GraphQL errors and does not map server field errors into forms. The task asks candidates for exactly that. Legitimate, but worth knowing for the conversation.
 - Our webapp's codegen config contains a hard-coded bearer token and the dev API host. Unrelated to this repo, but should be fixed there.
-- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding. Ticket 04: empty filter values, strict `dueBefore`. Ticket 05: blank text counts as missing and is not stored, submitted values replace stored ones, request-level error codes.
+- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding. Ticket 04: empty filter values, strict `dueBefore`. Ticket 05: blank text counts as missing and is not stored, submitted values replace stored ones, request-level error codes. Ticket 06: where conditions live, runtime chaos switch, trigger matching, reset.

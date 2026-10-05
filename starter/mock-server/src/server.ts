@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { createSchema, createYoga, type Plugin } from 'graphql-yoga';
 import { viewerFromAuthorization, type Viewer } from './auth.ts';
 import { systemClock, type Clock } from './clock.ts';
+import { createConditions, noConditions, type RequestConditions } from './conditions.ts';
 import { defaultConfig, type MockConfig } from './config.ts';
-import { controlPlugin } from './control.ts';
+import { createHttpHandler, type ServerContext } from './http.ts';
 import { resolvers } from './resolvers.ts';
 import { createStore, type Store } from './store.ts';
 
@@ -12,11 +13,14 @@ export interface MockContext {
   config: MockConfig;
   clock: Clock;
   store: Store;
+  conditions: RequestConditions;
 }
 
 export interface MockServerOptions {
   config?: Partial<MockConfig>;
   clock?: Clock;
+  /** Where log lines go. Defaults to the console. */
+  log?: (line: string) => void;
 }
 
 const typeDefs = readFileSync(new URL('../../schema/schema.graphql', import.meta.url), 'utf8');
@@ -57,17 +61,20 @@ function requestErrorCodePlugin(): Plugin {
 export function createMockServer(options: MockServerOptions = {}) {
   const config: MockConfig = { ...defaultConfig, ...options.config };
   const clock = options.clock ?? systemClock;
+  const log = options.log ?? ((line: string) => console.log(line));
   const store = createStore(config, clock);
+  const conditions = createConditions(config);
 
-  const yoga = createYoga<{}, MockContext>({
+  const yoga = createYoga<ServerContext, MockContext>({
     schema: createSchema<MockContext>({ typeDefs, resolvers }),
-    context: ({ request }) => ({
+    context: ({ request, conditions: requestConditions }) => ({
       viewer: viewerFromAuthorization(request.headers.get('authorization'))!,
       config,
       clock,
       store,
+      conditions: requestConditions ?? noConditions(),
     }),
-    plugins: [controlPlugin(store), authPlugin(), requestErrorCodePlugin()],
+    plugins: [authPlugin(), requestErrorCodePlugin()],
     cors: {
       origin: config.corsOrigin,
       methods: ['GET', 'POST', 'OPTIONS'],
@@ -80,12 +87,14 @@ export function createMockServer(options: MockServerOptions = {}) {
     logging: 'warn',
   });
 
+  const handler = createHttpHandler({ yoga, config, store, conditions, log });
+
   return {
     config,
     /** Fetch-style handler: Request in, Response out. */
-    fetch: (request: Request) => yoga.fetch(request),
+    fetch: async (request: Request): Promise<Response> => handler.fetch(request),
     /** Node.js request listener for `http.createServer`. */
-    requestListener: yoga,
+    requestListener: handler,
   };
 }
 

@@ -12,7 +12,7 @@ export interface CompleteTaskInput {
 /** Completes a task for the viewer. Values not sent are not kept, including prefilled ones. */
 export function completeTask(
   input: CompleteTaskInput,
-  { store, viewer, clock }: Pick<MockContext, 'store' | 'viewer' | 'clock'>,
+  { store, viewer, clock, conditions }: Pick<MockContext, 'store' | 'viewer' | 'clock' | 'conditions'>,
 ) {
   const task = store.data.tasks.get(input.taskId);
   if (!task) throw mockError('NOT_FOUND', `Task ${input.taskId} does not exist.`);
@@ -21,6 +21,7 @@ export function completeTask(
       currentStatus: task.status,
     });
   }
+  if (conditions.conflict) task.version += 1;
   if (task.version !== input.expectedVersion) {
     throw mockError('CONFLICT', `Task ${task.id} has changed since version ${input.expectedVersion}.`, {
       currentVersion: task.version,
@@ -28,6 +29,11 @@ export function completeTask(
   }
 
   const fields = store.data.forms.get(task.processId)!;
+  if (conditions.validation) {
+    throw mockError('VALIDATION_FAILED', 'Some values are not valid.', {
+      fieldErrors: [{ key: fields[0]!.key, message: 'Rejected by the server.' }],
+    });
+  }
   const fieldErrors = validateValues(fields, input.values);
   if (fieldErrors.length) throw mockError('VALIDATION_FAILED', 'Some values are not valid.', { fieldErrors });
 
@@ -38,5 +44,6 @@ export function completeTask(
     completedAt: iso(clock.now()),
     values: toFieldValues(fields, input.values),
   });
+  if (conditions.loseResponse) conditions.answerUnavailable = true;
   return { task };
 }
