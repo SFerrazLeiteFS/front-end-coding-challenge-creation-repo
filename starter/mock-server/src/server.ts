@@ -65,7 +65,7 @@ export function createMockServer(options: MockServerOptions = {}) {
     },
     graphiql: {
       title: 'Approval Inbox mock server',
-      headers: JSON.stringify({ authorization: 'Bearer demo-user' }),
+      headers: JSON.stringify({ authorization: 'Bearer demo.user' }),
     },
     logging: 'warn',
   });

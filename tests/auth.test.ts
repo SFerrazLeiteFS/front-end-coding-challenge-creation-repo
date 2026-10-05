@@ -18,7 +18,7 @@ describe('auth and viewer', () => {
 
     expect(response.status).toBe(200);
     expect(body.errors).toBeUndefined();
-    expect(body.data.viewer).toEqual({ id: 'user-demo-user', displayName: 'Demo User' });
+    expect(body.data.viewer).toEqual({ id: 'user-demo.user', displayName: 'Demo User' });
   });
 
   it('gives different tokens different, stable viewers', async () => {

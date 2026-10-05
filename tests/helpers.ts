@@ -9,7 +9,7 @@ export function setup(config: Partial<MockConfig> = {}) {
   async function gql<T = any>(
     query: string,
     variables: Record<string, unknown> = {},
-    { token = 'demo-user' }: { token?: string | null } = {},
+    { token = 'demo.user' }: { token?: string | null } = {},
   ) {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (token !== null) headers.authorization = `Bearer ${token}`;

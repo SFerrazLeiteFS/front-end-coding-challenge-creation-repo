@@ -2,3 +2,5 @@ node_modules/
 .next/
 .DS_Store
 *.log
+next-env.d.ts
+*.tsbuildinfo
