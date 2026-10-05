@@ -18,6 +18,17 @@ pnpm setup   # installs starter/ and the builder test tooling
 pnpm test    # builder tests against starter/mock-server
 ```
 
+## Shipping the starter
+
+```
+node scripts/check-starter.mjs <dir>       # forbidden terms (also inside identifiers) and internal names
+scripts/export-starter.sh [--force]        # starter/ from main → one commit "Initial commit" → candidate repo
+scripts/package-zip.sh                     # ZIP from the candidate repo → dist/approval-inbox.zip
+scripts/package-zip.sh --from-ref main     # ZIP straight from starter/ on main, without exporting
+```
+
+Only content committed on `main` is shipped (`--ref` to choose another ref). Check by hand before an export: `pnpm install && pnpm dev` in a fresh copy, both example pages.
+
 ## Contents
 
 | Path | Purpose |
@@ -28,6 +39,7 @@ pnpm test    # builder tests against starter/mock-server
 | `specs/` | created during the grilling session |
 | `tickets/` | created by `/to-tickets` |
 | `tests/` | builder-only tests proving the starter supports the task |
+| `scripts/` | check, export and ZIP for the starter |
 | `starter/` | created during implementation, the only part that ships |
 
 ## Language
