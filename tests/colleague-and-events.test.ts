@@ -296,7 +296,7 @@ describe('task events', () => {
     const stream = await subscribe(mock);
     const [task] = await openTasks(mock, { processId: 'process-invoice' });
 
-    await mock.control(`conflict/${task!.id}`);
+    await mock.control(`bump-version/${task!.id}`);
     await mock.gql(COMPLETE, { input: { taskId: task!.id, expectedVersion: task!.version + 1, values: invoiceValues } });
     await stream.settle();
 
@@ -304,6 +304,18 @@ describe('task events', () => {
       ['UPDATED', task!.status, task!.version + 1],
       ['COMPLETED', 'COMPLETED', task!.version + 2],
     ]);
+    await stream.close();
+  });
+
+  it('also reports a task leaving the filter', async () => {
+    const mock = setup();
+    const stream = await subscribe(mock, { filter: { status: ['OPEN', 'IN_PROGRESS'] } });
+    const [task] = await openTasks(mock, { processId: 'process-invoice' });
+
+    await mock.gql(COMPLETE, { input: { taskId: task!.id, expectedVersion: task!.version, values: invoiceValues } });
+    await stream.settle();
+
+    expect(stream.events.map((event) => [event.kind, event.task.id])).toEqual([['COMPLETED', task!.id]]);
     await stream.close();
   });
 
@@ -325,7 +337,7 @@ describe('version bump endpoint', () => {
     const mock = setup();
     const [task] = await openTasks(mock, { processId: 'process-invoice' });
 
-    const { response, body } = await mock.control(`conflict/${task!.id}`);
+    const { response, body } = await mock.control(`bump-version/${task!.id}`);
 
     expect(response.status).toBe(200);
     expect(body.task).toEqual({ id: task!.id, version: task!.version + 1 });
@@ -338,7 +350,7 @@ describe('version bump endpoint', () => {
   it('answers 404 for an unknown task', async () => {
     const mock = setup();
 
-    expect((await mock.control('conflict/task-9999')).response.status).toBe(404);
+    expect((await mock.control(`bump-version/task-9999`)).response.status).toBe(404);
   });
 });
 
@@ -354,6 +366,41 @@ describe('stream lifetime', () => {
     mock.clock.advance(3 * MINUTE + 1);
     await stream.settle();
     expect(stream.closed).toBe(true);
+  });
+
+  it('closes a stream opened while conditions were off once they are switched on', async () => {
+    const mock = setup({ ...calm, chaos: false, foreignEditIntervalMs: 60 * MINUTE });
+    const stream = await subscribe(mock);
+    mock.clock.advance(30 * MINUTE);
+    await stream.settle();
+    expect(stream.closed).toBe(false);
+
+    await mock.control('config', { MOCK_CHAOS: 'on' });
+    mock.clock.advance(5 * MINUTE);
+    await stream.settle();
+
+    expect(stream.closed).toBe(true);
+  });
+
+  it('ends open streams on reset', async () => {
+    const mock = setup();
+    const stream = await subscribe(mock);
+
+    await mock.control('reset');
+    await stream.settle();
+
+    expect(stream.closed).toBe(true);
+  });
+
+  it('is not hit by whole-operation errors', async () => {
+    const mock = setup({ ...calm, internalRate: 1, foreignEditIntervalMs: 1000 });
+    const stream = await subscribe(mock);
+
+    mock.clock.advance(1000);
+    await stream.settle();
+
+    expect(stream.events).toHaveLength(1);
+    await stream.close();
   });
 
   it('keeps a stream open while realistic conditions are off', async () => {

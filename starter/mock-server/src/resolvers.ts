@@ -1,8 +1,8 @@
 import { completeTask, type CompleteTaskInput } from './complete-task.ts';
 import { mockError } from './errors.ts';
+import type { TaskEvent } from './events.ts';
 import type { Task } from './model.ts';
 import { listTasks, type TaskFilter, type TaskListArgs } from './task-list.ts';
-import type { TaskEvent } from './events.ts';
 import type { MockContext } from './server.ts';
 
 type NoArgs = Record<string, never>;

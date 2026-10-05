@@ -1,18 +1,19 @@
 import { ConfigError, describeConfig, runtimeChanges, type MockConfig } from './config.ts';
-import { behaviors, type Conditions, type Trigger } from './conditions.ts';
+import { behaviors, type Trigger } from './conditions.ts';
 import type { Events } from './events.ts';
 import type { Store } from './store.ts';
 
-interface ControlDeps {
+export interface ControlDeps {
   config: MockConfig;
   store: Store;
   events: Events;
-  conditions: Conditions;
-  /** Data, random sequences, triggers and the colleague back to the start. */
+  /** Data, random sequences, triggers, colleague and open streams back to the start. */
   resetAll: () => void;
+  addTrigger: (trigger: Trigger) => void;
 }
 
 class BadRequest extends Error {}
+class NotFound extends Error {}
 
 async function readJson(request: Request): Promise<Record<string, unknown>> {
   const text = await request.text();
@@ -39,17 +40,9 @@ function parseTrigger(body: Record<string, unknown>): Trigger {
 }
 
 /** Endpoints under /__mock/ to control the mock while developing. Useful for testing. */
-export async function handleControl(request: Request, path: string, { config, store, events, conditions, resetAll }: ControlDeps) {
-  const conflict = /^\/__mock\/conflict\/([^/]+)$/.exec(path);
-  if (conflict && request.method === 'POST') {
-    const task = store.data.tasks.get(decodeURIComponent(conflict[1]!));
-    if (!task) return Response.json({ message: `Unknown task ${conflict[1]}` }, { status: 404 });
-    task.version += 1;
-    events.publish('UPDATED', task);
-    return Response.json({ ok: true, task: { id: task.id, version: task.version } });
-  }
+export async function handleControl(request: Request, path: string, { config, store, events, resetAll, addTrigger }: ControlDeps) {
 
-  const routes: Record<string, (body: Record<string, unknown>) => unknown> = {
+  const routes: Record<string, (body: Record<string, unknown>, param?: string) => unknown> = {
     'POST /__mock/reset': () => {
       resetAll();
       return { ok: true };
@@ -58,18 +51,31 @@ export async function handleControl(request: Request, path: string, { config, st
       Object.assign(config, runtimeChanges(body));
       return describeConfig(config);
     },
+    'POST /__mock/bump-version/:taskId': (_, taskId) => {
+      const task = store.data.tasks.get(taskId!);
+      if (!task) throw new NotFound(`Unknown task ${taskId}`);
+      const before = structuredClone(task);
+      task.version += 1;
+      events.publish('UPDATED', task, before);
+      return { ok: true, task: { id: task.id, version: task.version } };
+    },
     'POST /__mock/next': (body) => {
       const trigger = parseTrigger(body);
-      conditions.addTrigger(trigger);
+      addTrigger(trigger);
       return { ok: true, next: trigger };
     },
   };
 
-  const route = routes[`${request.method} ${path}`];
-  if (!route) return Response.json({ message: `Unknown control endpoint ${request.method} ${path}` }, { status: 404 });
+  const [, name, param] = /^(\/__mock\/[^/]+)(?:\/([^/]+))?$/.exec(path) ?? [];
+  const route = routes[`${request.method} ${name}`] ?? routes[`${request.method} ${name}/:taskId`];
+  const takesParam = !routes[`${request.method} ${name}`];
+  if (!route || takesParam !== (param !== undefined)) {
+    return Response.json({ message: `Unknown control endpoint ${request.method} ${path}` }, { status: 404 });
+  }
   try {
-    return Response.json(route(await readJson(request)));
+    return Response.json(route(await readJson(request), param && decodeURIComponent(param)));
   } catch (error) {
+    if (error instanceof NotFound) return Response.json({ message: error.message }, { status: 404 });
     if (error instanceof BadRequest || error instanceof ConfigError) {
       return Response.json({ message: error.message }, { status: 400 });
     }

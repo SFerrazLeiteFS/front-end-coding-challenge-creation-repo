@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import { createSchema, createYoga, type Plugin } from 'graphql-yoga';
 import { viewerFromAuthorization, type Viewer } from './auth.ts';
 import { systemClock, type Clock } from './clock.ts';
+import { startColleague } from './colleague.ts';
 import { createConditions, noConditions, type RequestConditions } from './conditions.ts';
 import { defaultConfig, type MockConfig } from './config.ts';
+import { createEvents, type Events } from './events.ts';
 import { createHttpHandler, type ServerContext } from './http.ts';
 import { resolvers } from './resolvers.ts';
-import { startColleague } from './colleague.ts';
-import { createEvents, type Events } from './events.ts';
 import { createStore, type Store } from './store.ts';
 import { createStreams, type Streams } from './streams.ts';
 
@@ -103,7 +103,7 @@ export function createMockServer(options: MockServerOptions = {}) {
     streams.reset();
     colleague.reset();
   };
-  const handler = createHttpHandler({ yoga, config, store, events, resetAll, log, conditions });
+  const handler = createHttpHandler({ yoga, config, conditions, log, control: { config, store, events, resetAll, addTrigger: conditions.addTrigger } });
 
   return {
     config,

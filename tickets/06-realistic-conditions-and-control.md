@@ -34,4 +34,4 @@ spec: specs/spec.md (Mock server, Control endpoints)
 - Requests without a token skip latency and failures and never use up a trigger; they always get 401.
 - Triggers for `lost-response`, `conflict` and `validation` wait for the next `completeTask`, even without an operation filter.
 - `MOCK_CHAOS` is changeable at runtime (beyond the ticket). Reset also drops pending triggers and restarts the random sequence.
-- `POST /__mock/conflict/:taskId` is part of ticket 07, as planned.
+- The version-bump endpoint is part of ticket 07, as planned (named `POST /__mock/bump-version/:taskId` there).

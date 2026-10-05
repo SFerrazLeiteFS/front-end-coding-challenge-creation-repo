@@ -13,12 +13,16 @@ export interface DataSet {
   nextTaskNumber: number;
 }
 
-const priorities: [Priority, number][] = [
+const weightedPriorities: [Priority, number][] = [
   ['LOW', 20],
   ['NORMAL', 50],
   ['HIGH', 22],
   ['URGENT', 8],
 ];
+
+const sampleAssignee = (random: Random) => (random.chance(0.75) ? random.pick(team) : null);
+const sampleDueAt = (random: Random, createdAt: number) =>
+  random.chance(0.85) ? iso(startOfDay(createdAt) + random.int(2, 45) * DAY + 17 * HOUR) : null;
 
 /** A new open task, created right now (e.g. by a colleague). */
 export function createOpenTask(random: Random, data: DataSet, now: number): Task {
@@ -31,10 +35,10 @@ export function createOpenTask(random: Random, data: DataSet, now: number): Task
     title,
     processId: definition.process.id,
     status: 'OPEN',
-    priority: random.weighted(priorities),
-    assignee: random.chance(0.75) ? random.pick(team) : null,
+    priority: random.weighted(weightedPriorities),
+    assignee: sampleAssignee(random),
     createdAt: iso(now),
-    dueAt: random.chance(0.85) ? iso(startOfDay(now) + random.int(2, 45) * DAY + 17 * HOUR) : null,
+    dueAt: sampleDueAt(random, now),
     completedBy: null,
     completedAt: null,
     values,
@@ -65,9 +69,9 @@ export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCo
       ['COMPLETED', 25],
       ['CANCELLED', 10],
     ]);
-    const priority = random.weighted(priorities);
-    const assignee = random.chance(0.75) ? random.pick(team) : null;
-    const dueAt = random.chance(0.85) ? iso(startOfDay(createdAt) + random.int(2, 45) * DAY + 17 * HOUR) : null;
+    const priority = random.weighted(weightedPriorities);
+    const assignee = sampleAssignee(random);
+    const dueAt = sampleDueAt(random, createdAt);
     const completed = status === 'COMPLETED';
 
     tasks.set(taskId(n), {

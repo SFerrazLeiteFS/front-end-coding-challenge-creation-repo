@@ -175,7 +175,7 @@ graphql-yoga, separate process on port 4000, `/graphql`, CORS for the web app on
 | Lost response | 2 % of `completeTask`: change is persisted, response is 503 | `MOCK_LOST_RESPONSE_RATE` | idempotency on retry: second attempt gets `FAILED_PRECONDITION`; `completedBy` tells who did it |
 | Foreign edits | every 8 s one action on a random open task, see below | `MOCK_FOREIGN_EDIT_INTERVAL_MS` | real conflicts, two-tabs question, live updates |
 | Cursors | opaque base64 of sort key, ID, filter/sort hash, issue time | | `BAD_CURSOR`, filter change during infinite scroll |
-| Subscription | SSE; events for foreign edits and own completions; with chaos each stream closes after 2 to 5 min | | reconnect, cache integration |
+| Subscription | SSE; events for foreign edits and own completions, sent when the task matches the filter before or after the change; with chaos each stream closes after 2 to 5 min; reset ends open streams | | reconnect, cache integration |
 | Auth | any non-empty bearer token is valid, `viewer` is derived from the token | | header propagation in SSR and browser |
 
 Foreign edit actions (drawn with the seed): 60 % update (`priority`, `dueAt` or a prefilled value, version +1), 20 % complete (`completedBy` a colleague, version +1), 10 % create, 5 % cancel (version +1), 5 % remove. Own completions also bump the version and emit `COMPLETED`.
@@ -186,7 +186,7 @@ Intermediate rates are reproducible only for sequential requests with the same s
 
 - `POST /__mock/reset` resets the data set to the seed.
 - `POST /__mock/config` changes rates and latency at runtime (JSON body with the same keys as the env variables).
-- `POST /__mock/conflict/:taskId` bumps a task's version immediately.
+- `POST /__mock/bump-version/:taskId` bumps a task's version immediately (and emits `UPDATED`).
 - `POST /__mock/next` applies one behaviour to the next request, optionally filtered by `operation`. Behaviours: `unavailable`, `internal`, `partial`, `lost-response`, `slow` (with `ms`), `conflict`, `validation`.
 
 Candidate-facing mock README documents only start, port, token/viewer, `MOCK_CHAOS=off`, `MOCK_SEED`, `/__mock/reset`, a general sentence about varying responses, failures and parallel edits, and a pointer to the config source file. Rates and the other control endpoints are only discoverable in the code, named and commented neutrally. The builder-only review playbook lists one trigger per behaviour.

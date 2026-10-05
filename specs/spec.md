@@ -136,7 +136,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 
 - Reset to the seed.
 - Change rates, latency and the realistic-conditions switch at runtime (same keys as the environment variables; start-only keys are rejected).
-- Bump a task's version immediately.
+- Bump a task's version immediately (`POST /__mock/bump-version/:taskId`, emits `UPDATED`).
 - Next-request trigger: applies one behaviour to the next request, optionally filtered by operation name or root field. Behaviours: unavailable (503), internal, partial, lost-response, slow (with duration), conflict, validation. The last three only apply to `completeTask` and wait for the next completion. Reset also drops pending triggers and restarts the random sequence.
 - All are named and commented neutrally ("useful for testing").
 
@@ -152,7 +152,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Added: `nodes` on the task connection next to `edges`.
 - Removed: `totalCount`. Removed backward pagination (`before`, `last`, `hasPreviousPage`, `startCursor`).
 - `first` defaults to 20, values above 100 are silently capped, values below 1 fail with `VALIDATION_FAILED`.
-- Subscription `taskEvents(filter)` stays, payload `{ kind, task }` with kinds created, updated, completed, removed. For removed, `task` is the last state.
+- Subscription `taskEvents(filter)` stays, payload `{ kind, task }` with kinds created, updated, completed, removed. For removed, `task` is the last state. An event is sent when the task matches the filter before or after the change, so subscribers learn when a task leaves their filter.
 - Rest of the sketch (filter, enums, form field interface and six implementations, value union, complete input with one-of-style value input) stays as drafted.
 
 ### Domain rules
@@ -204,7 +204,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 ### Subscription
 
 - SSE only (no WebSocket), as in the gateway.
-- With realistic conditions on, each stream is closed after a random lifetime of 2 to 5 minutes. No separate switch.
+- With realistic conditions on, each stream is closed after a random lifetime of 2 to 5 minutes; the switch is checked when the lifetime is up, so it also applies to streams opened while it was off. No separate switch. Reset ends all open streams. Whole-operation `INTERNAL` does not apply to subscription requests.
 
 ### Web scaffold
 
@@ -275,4 +275,4 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Research findings with evidence: `specs/research.md` (builder repo only).
 - Our webapp does not distinguish network from GraphQL errors and does not map server field errors into forms. The task asks candidates for exactly that. Legitimate, but worth knowing for the conversation.
 - Our webapp's codegen config contains a hard-coded bearer token and the dev API host. Unrelated to this repo, but should be fixed there.
-- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding. Ticket 04: empty filter values, strict `dueBefore`. Ticket 05: blank text counts as missing and is not stored, submitted values replace stored ones, request-level error codes. Ticket 06: where conditions live, runtime chaos switch, trigger matching, reset.
+- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding. Ticket 04: empty filter values, strict `dueBefore`. Ticket 05: blank text counts as missing and is not stored, submitted values replace stored ones, request-level error codes. Ticket 06: where conditions live, runtime chaos switch, trigger matching, reset. Ticket 07: bump-version endpoint name, event filter before/after, stream lifetime and reset.

@@ -1,22 +1,13 @@
 import type { Clock } from './clock.ts';
 import type { MockConfig } from './config.ts';
 import { createOpenTask } from './data/generate.ts';
-import type { Events } from './events.ts';
+import type { Events, TaskEventKind } from './events.ts';
 import type { Priority, Task } from './model.ts';
 import { createRandom, type Random } from './random.ts';
 import type { Store } from './store.ts';
 import { DAY, iso } from './time.ts';
 
-type Action = 'update' | 'complete' | 'create' | 'cancel' | 'remove';
-
-const actions: [Action, number][] = [
-  ['update', 60],
-  ['complete', 20],
-  ['create', 10],
-  ['cancel', 5],
-  ['remove', 5],
-];
-const priorities: Priority[] = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
+const allPriorities: Priority[] = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 
 interface ColleagueDeps {
   config: MockConfig;
@@ -33,47 +24,65 @@ export function startColleague({ config, clock, store, events }: ColleagueDeps) 
   let random: Random = createRandom(config.seed + 2);
   let timer: unknown;
 
+  /** Changes the priority, the due date or a prefilled number or date. */
   function update(task: Task) {
+    const values = task.values.filter((value) => value.__typename === 'NumberValue' || value.__typename === 'DateValue');
     const change = random.pick(['priority', 'dueAt', 'value'] as const);
-    const number = task.values.find((value) => value.__typename === 'NumberValue');
-    if (change === 'priority' || (change === 'value' && !number)) {
-      task.priority = random.pick(priorities.filter((priority) => priority !== task.priority));
-    } else if (change === 'dueAt') {
+    if (change === 'dueAt') {
       const base = task.dueAt ? Date.parse(task.dueAt) : clock.now();
       task.dueAt = iso(base + random.pick([-2, -1, 1, 2, 3]) * DAY);
-    } else if (number?.__typename === 'NumberValue') {
-      number.number = Math.round(number.number * random.pick([0.5, 0.9, 1.1, 2]) * 100) / 100;
+    } else if (change === 'value' && values.length) {
+      const value = random.pick(values);
+      if (value.__typename === 'NumberValue') value.number = Math.round(value.number * random.pick([0.5, 0.9, 1.1, 2]));
+      if (value.__typename === 'DateValue') value.date = iso(Date.parse(value.date) + random.pick([1, 2, 7]) * DAY);
+    } else {
+      task.priority = random.pick(allPriorities.filter((priority) => priority !== task.priority));
     }
   }
 
+  /** Changes to an existing task and the event they cause. */
+  const changes: Record<'update' | 'complete' | 'cancel', { apply: (task: Task) => void; kind: TaskEventKind }> = {
+    update: { apply: update, kind: 'UPDATED' },
+    complete: {
+      apply: (task) => {
+        task.status = 'COMPLETED';
+        task.completedBy = random.pick(store.data.team);
+        task.completedAt = iso(clock.now());
+      },
+      kind: 'COMPLETED',
+    },
+    cancel: { apply: (task) => (task.status = 'CANCELLED'), kind: 'UPDATED' },
+  };
+
   function act() {
-    const action = random.weighted(actions);
+    const action = random.weighted([
+      ['update', 60],
+      ['complete', 20],
+      ['create', 10],
+      ['cancel', 5],
+      ['remove', 5],
+    ] as const);
     const { data } = store;
     if (action === 'create') {
       const task = createOpenTask(random, data, clock.now());
       data.tasks.set(task.id, task);
-      events.publish('CREATED', task);
+      events.publish('CREATED', task, null);
       return;
     }
 
     const open = [...data.tasks.values()].filter((task) => task.status === 'OPEN' || task.status === 'IN_PROGRESS');
     if (open.length === 0) return;
     const task = random.pick(open);
+    const before = structuredClone(task);
 
     if (action === 'remove') {
       data.tasks.delete(task.id);
-      events.publish('REMOVED', task);
+      events.publish('REMOVED', task, before);
       return;
     }
     task.version += 1;
-    if (action === 'update') update(task);
-    if (action === 'cancel') task.status = 'CANCELLED';
-    if (action === 'complete') {
-      task.status = 'COMPLETED';
-      task.completedBy = random.pick(data.team);
-      task.completedAt = iso(clock.now());
-    }
-    events.publish(action === 'complete' ? 'COMPLETED' : 'UPDATED', task);
+    changes[action].apply(task);
+    events.publish(changes[action].kind, task, before);
   }
 
   function schedule() {

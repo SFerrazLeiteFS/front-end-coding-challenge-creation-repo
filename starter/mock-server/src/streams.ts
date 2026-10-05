@@ -9,34 +9,54 @@ import { MINUTE } from './time.ts';
 const MIN_LIFETIME = 2 * MINUTE;
 const MAX_LIFETIME = 5 * MINUTE;
 
-/** `taskEvents` streams. While `config.chaos` is on, each stream ends after a random lifetime. */
-export function createStreams({ config, clock, events }: { config: MockConfig; clock: Clock; events: Events }) {
+interface StreamDeps {
+  config: MockConfig;
+  clock: Clock;
+  events: Events;
+}
+
+/**
+ * `taskEvents` streams. A stream gets an event when the task matches the filter
+ * before or after the change. While `config.chaos` is on, a stream ends after
+ * a random lifetime of two to five minutes.
+ */
+export function createStreams({ config, clock, events }: StreamDeps) {
   let random: Random = createRandom(config.seed + 3);
+  const open = new Set<() => void>();
 
   return {
+    /** Ends all open streams and restarts the random sequence. */
     reset() {
+      for (const stop of [...open]) stop();
       random = createRandom(config.seed + 3);
     },
     taskEvents(filter: TaskFilter | null | undefined) {
       const normalized = normalizeFilter(filter);
-      const lifetime = config.chaos ? random.int(MIN_LIFETIME, MAX_LIFETIME) : null;
+      const lifetime = random.int(MIN_LIFETIME, MAX_LIFETIME);
 
       // Listen right away, so nothing is missed between the request and the first read.
       const queue: TaskEvent[] = [];
       let wake: (() => void) | undefined;
       const unlisten = events.listen((event) => {
-        if (!matches(event.task, normalized)) return;
+        const relevant = matches(event.task, normalized) || (event.before !== null && matches(event.before, normalized));
+        if (!relevant) return;
         queue.push(event);
         wake?.();
       });
 
       return new Repeater<TaskEvent>(async (push, stop) => {
         let stopped = false;
-        const timer = lifetime === null ? undefined : clock.setTimeout(() => config.chaos && stop(), lifetime);
+        let timer: unknown;
+        const endWhenDue = () => {
+          timer = clock.setTimeout(() => (config.chaos ? stop() : endWhenDue()), lifetime);
+        };
+        endWhenDue();
+        open.add(stop);
         stop.then(() => {
           stopped = true;
+          open.delete(stop);
           unlisten();
-          if (timer !== undefined) clock.clearTimeout(timer);
+          clock.clearTimeout(timer);
           wake?.();
         });
         while (!stopped) {

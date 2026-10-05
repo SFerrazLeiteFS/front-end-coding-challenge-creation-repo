@@ -37,6 +37,7 @@ export function completeTask(
   const fieldErrors = validateValues(fields, input.values);
   if (fieldErrors.length) throw mockError('VALIDATION_FAILED', 'Some values are not valid.', { fieldErrors });
 
+  const before = structuredClone(task);
   Object.assign(task, {
     status: 'COMPLETED',
     version: task.version + 1,
@@ -44,7 +45,7 @@ export function completeTask(
     completedAt: iso(clock.now()),
     values: toFieldValues(fields, input.values),
   });
-  events.publish('COMPLETED', task);
+  events.publish('COMPLETED', task, before);
   if (conditions.loseResponse) conditions.answerUnavailable = true;
   return { task };
 }

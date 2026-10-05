@@ -2,11 +2,9 @@ import { createServerAdapter } from '@whatwg-node/server';
 import { viewerFromAuthorization } from './auth.ts';
 import type { MockConfig } from './config.ts';
 import type { Conditions, RequestConditions } from './conditions.ts';
-import { handleControl } from './control.ts';
+import { handleControl, type ControlDeps } from './control.ts';
 import { mockError } from './errors.ts';
 import { describeRequest, readRequestInfo } from './request-info.ts';
-import type { Events } from './events.ts';
-import type { Store } from './store.ts';
 
 export interface ServerContext {
   conditions?: RequestConditions;
@@ -15,10 +13,8 @@ export interface ServerContext {
 interface HandlerDeps {
   yoga: { fetch(request: Request, context: ServerContext): Response | Promise<Response> };
   config: MockConfig;
-  store: Store;
-  events: Events;
   conditions: Conditions;
-  resetAll: () => void;
+  control: ControlDeps;
   log: (line: string) => void;
 }
 
@@ -36,7 +32,7 @@ const wait = (ms: number, signal: AbortSignal) =>
  * HTTP entry point. Control endpoints are answered here; GraphQL requests get
  * their conditions (delay, failures) before and after they reach graphql-yoga.
  */
-export function createHttpHandler({ yoga, config, store, events, conditions, resetAll, log }: HandlerDeps) {
+export function createHttpHandler({ yoga, config, conditions, control, log }: HandlerDeps) {
   const corsHeaders = (request: Request): Record<string, string> =>
     request.headers.get('origin') === config.corsOrigin
       ? { 'access-control-allow-origin': config.corsOrigin, vary: 'Origin' }
@@ -46,7 +42,7 @@ export function createHttpHandler({ yoga, config, store, events, conditions, res
   return createServerAdapter(async (request: Request) => {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/__mock/')) {
-      return handleControl(request, url.pathname, { config, store, events, conditions, resetAll });
+      return handleControl(request, url.pathname, control);
     }
 
     const isGraphiQL = request.method === 'GET' && request.headers.get('accept')?.includes('text/html');
@@ -58,6 +54,8 @@ export function createHttpHandler({ yoga, config, store, events, conditions, res
     const info = await readRequestInfo(request);
     const names = [info.operationName, ...info.rootFields].filter((name): name is string => !!name);
     const current = conditions.forRequest(names, { isCompletion: info.rootFields.includes('completeTask') });
+    // A whole-operation error has no place in an event stream.
+    if (info.rootFields.includes('taskEvents')) current.internal = false;
 
     let answered = false;
     request.signal.addEventListener('abort', () => {
