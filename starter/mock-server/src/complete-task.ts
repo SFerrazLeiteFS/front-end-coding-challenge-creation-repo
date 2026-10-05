@@ -12,7 +12,7 @@ export interface CompleteTaskInput {
 /** Completes a task for the viewer. Values not sent are not kept, including prefilled ones. */
 export function completeTask(
   input: CompleteTaskInput,
-  { store, viewer, clock, conditions }: Pick<MockContext, 'store' | 'viewer' | 'clock' | 'conditions'>,
+  { store, viewer, clock, conditions, events }: Pick<MockContext, 'store' | 'viewer' | 'clock' | 'conditions' | 'events'>,
 ) {
   const task = store.data.tasks.get(input.taskId);
   if (!task) throw mockError('NOT_FOUND', `Task ${input.taskId} does not exist.`);
@@ -44,6 +44,7 @@ export function completeTask(
     completedAt: iso(clock.now()),
     values: toFieldValues(fields, input.values),
   });
+  events.publish('COMPLETED', task);
   if (conditions.loseResponse) conditions.answerUnavailable = true;
   return { task };
 }

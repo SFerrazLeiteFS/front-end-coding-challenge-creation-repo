@@ -1,11 +1,15 @@
 import { ConfigError, describeConfig, runtimeChanges, type MockConfig } from './config.ts';
 import { behaviors, type Conditions, type Trigger } from './conditions.ts';
+import type { Events } from './events.ts';
 import type { Store } from './store.ts';
 
 interface ControlDeps {
   config: MockConfig;
   store: Store;
+  events: Events;
   conditions: Conditions;
+  /** Data, random sequences, triggers and the colleague back to the start. */
+  resetAll: () => void;
 }
 
 class BadRequest extends Error {}
@@ -35,11 +39,19 @@ function parseTrigger(body: Record<string, unknown>): Trigger {
 }
 
 /** Endpoints under /__mock/ to control the mock while developing. Useful for testing. */
-export async function handleControl(request: Request, path: string, { config, store, conditions }: ControlDeps) {
+export async function handleControl(request: Request, path: string, { config, store, events, conditions, resetAll }: ControlDeps) {
+  const conflict = /^\/__mock\/conflict\/([^/]+)$/.exec(path);
+  if (conflict && request.method === 'POST') {
+    const task = store.data.tasks.get(decodeURIComponent(conflict[1]!));
+    if (!task) return Response.json({ message: `Unknown task ${conflict[1]}` }, { status: 404 });
+    task.version += 1;
+    events.publish('UPDATED', task);
+    return Response.json({ ok: true, task: { id: task.id, version: task.version } });
+  }
+
   const routes: Record<string, (body: Record<string, unknown>) => unknown> = {
     'POST /__mock/reset': () => {
-      store.reset();
-      conditions.reset();
+      resetAll();
       return { ok: true };
     },
     'POST /__mock/config': (body) => {

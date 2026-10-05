@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMockServer, type MockConfig } from '../starter/mock-server/src/index.ts';
 
 const servers: Server[] = [];
+const mocks: { stop(): void }[] = [];
 afterEach(() => {
-  for (const server of servers.splice(0)) server.close();
+  for (const server of servers.splice(0)) server.closeAllConnections?.(), server.close();
+  for (const mock of mocks.splice(0)) mock.stop();
 });
 
 async function listen(config: Partial<MockConfig>) {
@@ -13,6 +15,7 @@ async function listen(config: Partial<MockConfig>) {
   const mock = createMockServer({ config: { chaos: false, ...config }, log: (line) => logs.push(line) });
   const server = createServer(mock.requestListener);
   servers.push(server);
+  mocks.push(mock);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return { url: `http://127.0.0.1:${port}`, logs };
@@ -67,5 +70,32 @@ describe('over a real HTTP connection', () => {
 
     expect(response.status).toBe(200);
     expect((await post(url, '{ viewer { id } }')).status).toBe(503);
+  });
+
+  it('delivers task events over SSE', async () => {
+    const { url } = await listen({
+      chaos: true,
+      latencyMs: [0, 0],
+      unavailableRate: 0,
+      internalRate: 0,
+      partialRate: 0,
+      lostResponseRate: 0,
+      foreignEditIntervalMs: 50,
+    });
+    const controller = new AbortController();
+
+    const response = await fetch(`${url}/graphql`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'text/event-stream', authorization: 'Bearer demo.user' },
+      body: JSON.stringify({ query: 'subscription { taskEvents { kind task { id } } }' }),
+      signal: controller.signal,
+    });
+    const reader = response.body!.getReader();
+    let text = '';
+    while (!text.includes('event: next')) text += new TextDecoder().decode((await reader.read()).value);
+    controller.abort();
+
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    expect(text).toMatch(/"kind":"(CREATED|UPDATED|COMPLETED|REMOVED)"/);
   });
 });

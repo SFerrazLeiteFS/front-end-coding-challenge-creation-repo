@@ -1,5 +1,5 @@
 import type { FormField, Priority, Process, Task, TaskStatus, User } from '../model.ts';
-import { createRandom } from '../random.ts';
+import { createRandom, type Random } from '../random.ts';
 import { DAY, HOUR, iso, startOfDay } from '../time.ts';
 import { processDefinitions } from './processes.ts';
 import { team } from './team.ts';
@@ -9,6 +9,36 @@ export interface DataSet {
   forms: Map<string, FormField[]>;
   team: User[];
   tasks: Map<string, Task>;
+  /** Number for the next task that gets created. */
+  nextTaskNumber: number;
+}
+
+const priorities: [Priority, number][] = [
+  ['LOW', 20],
+  ['NORMAL', 50],
+  ['HIGH', 22],
+  ['URGENT', 8],
+];
+
+/** A new open task, created right now (e.g. by a colleague). */
+export function createOpenTask(random: Random, data: DataSet, now: number): Task {
+  const definition = random.weighted(processDefinitions.map((d) => [d, d.weight] as const));
+  const { title, values } = definition.sampleTask(random, startOfDay(now), data.forms.get(definition.process.id)!);
+  const id = taskId(data.nextTaskNumber++);
+  return {
+    id,
+    version: 1,
+    title,
+    processId: definition.process.id,
+    status: 'OPEN',
+    priority: random.weighted(priorities),
+    assignee: random.chance(0.75) ? random.pick(team) : null,
+    createdAt: iso(now),
+    dueAt: random.chance(0.85) ? iso(startOfDay(now) + random.int(2, 45) * DAY + 17 * HOUR) : null,
+    completedBy: null,
+    completedAt: null,
+    values,
+  };
 }
 
 export const taskId = (n: number) => `task-${String(n).padStart(4, '0')}`;
@@ -35,12 +65,7 @@ export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCo
       ['COMPLETED', 25],
       ['CANCELLED', 10],
     ]);
-    const priority = random.weighted<Priority>([
-      ['LOW', 20],
-      ['NORMAL', 50],
-      ['HIGH', 22],
-      ['URGENT', 8],
-    ]);
+    const priority = random.weighted(priorities);
     const assignee = random.chance(0.75) ? random.pick(team) : null;
     const dueAt = random.chance(0.85) ? iso(startOfDay(createdAt) + random.int(2, 45) * DAY + 17 * HOUR) : null;
     const completed = status === 'COMPLETED';
@@ -61,5 +86,5 @@ export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCo
     });
   }
 
-  return { processes: processDefinitions.map((d) => d.process), forms, team, tasks };
+  return { processes: processDefinitions.map((d) => d.process), forms, team, tasks, nextTaskNumber: taskCount + 1 };
 }

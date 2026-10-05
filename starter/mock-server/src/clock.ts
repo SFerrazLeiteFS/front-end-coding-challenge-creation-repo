@@ -7,7 +7,8 @@ export interface Clock {
 
 export const systemClock: Clock = {
   now: () => Date.now(),
-  setTimeout: (callback, ms) => setTimeout(callback, ms),
+  // unref: pending timers don't keep the process alive.
+  setTimeout: (callback, ms) => setTimeout(callback, ms).unref(),
   clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
 };
 

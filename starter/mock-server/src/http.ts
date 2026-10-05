@@ -5,6 +5,7 @@ import type { Conditions, RequestConditions } from './conditions.ts';
 import { handleControl } from './control.ts';
 import { mockError } from './errors.ts';
 import { describeRequest, readRequestInfo } from './request-info.ts';
+import type { Events } from './events.ts';
 import type { Store } from './store.ts';
 
 export interface ServerContext {
@@ -15,7 +16,9 @@ interface HandlerDeps {
   yoga: { fetch(request: Request, context: ServerContext): Response | Promise<Response> };
   config: MockConfig;
   store: Store;
+  events: Events;
   conditions: Conditions;
+  resetAll: () => void;
   log: (line: string) => void;
 }
 
@@ -33,7 +36,7 @@ const wait = (ms: number, signal: AbortSignal) =>
  * HTTP entry point. Control endpoints are answered here; GraphQL requests get
  * their conditions (delay, failures) before and after they reach graphql-yoga.
  */
-export function createHttpHandler({ yoga, config, store, conditions, log }: HandlerDeps) {
+export function createHttpHandler({ yoga, config, store, events, conditions, resetAll, log }: HandlerDeps) {
   const corsHeaders = (request: Request): Record<string, string> =>
     request.headers.get('origin') === config.corsOrigin
       ? { 'access-control-allow-origin': config.corsOrigin, vary: 'Origin' }
@@ -42,7 +45,9 @@ export function createHttpHandler({ yoga, config, store, conditions, log }: Hand
 
   return createServerAdapter(async (request: Request) => {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/__mock/')) return handleControl(request, url.pathname, { config, store, conditions });
+    if (url.pathname.startsWith('/__mock/')) {
+      return handleControl(request, url.pathname, { config, store, events, conditions, resetAll });
+    }
 
     const isGraphiQL = request.method === 'GET' && request.headers.get('accept')?.includes('text/html');
     const unauthenticated = !viewerFromAuthorization(request.headers.get('authorization'));
