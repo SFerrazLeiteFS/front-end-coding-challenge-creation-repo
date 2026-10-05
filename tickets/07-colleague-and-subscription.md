@@ -17,3 +17,7 @@ spec: specs/spec.md (Simulated colleague, Subscription)
 - [ ] With chaos on, each stream closes after a random lifetime of 2 to 5 minutes (via the clock)
 - [ ] Builder tests: each colleague action, events for colleague and own changes, filter on the subscription, stream lifetime, version bump causes `CONFLICT`
 - [ ] HTTP smoke test receives an event over a real SSE connection
+
+## Comments
+
+- From ticket 05: `completeTask` mutates the stored task object in place. Snapshot (copy) the task when emitting events, so a later change does not alter an event already sent.

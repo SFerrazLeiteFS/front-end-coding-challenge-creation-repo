@@ -158,6 +158,7 @@ Outside GraphQL errors:
 
 - Missing or empty bearer token: HTTP 401 with a small JSON message body.
 - Network failure: HTTP 503 with no body. The client has to distinguish both failure paths.
+- Request errors: `GRAPHQL_PARSE_FAILED`, `GRAPHQL_VALIDATION_FAILED` (graphql-yoga), `BAD_REQUEST` with HTTP 400 for variables of the wrong type.
 
 ## Mock behaviour
 

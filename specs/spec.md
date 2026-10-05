@@ -172,15 +172,15 @@ The mock documents only what a candidate needs to work (start, token, switching 
 
 ### Validation rules (server is source of truth)
 
-- Required means a value is present. Empty text and empty selection count as missing.
+- Required means a value is present. Empty text (including text of only spaces) and empty selection count as missing; such empty values are not stored.
 - Text: max length; pattern is a JavaScript regex without flags, matched against the whole value.
 - Number: min and max inclusive; step relative to min (or zero), with a small tolerance for floating-point rounding (e.g. 533.54 with step 0.01 is valid).
 - Date: min and max inclusive, date-time values.
-- Select: every value must be an option; exactly one when not multiple.
+- Select: every value must be an option, each at most once; exactly one when not multiple.
 - Boolean: required means the value must be true (confirmation checkbox).
 - Decision: value must be allowed; if the decision is in the comment-required list, the referenced text field becomes required.
 - Per input: exactly one value field set, matching the field type; at most one value per key; unknown keys fail; optional fields may be omitted.
-- All violations are returned together in `fieldErrors`. Prefilled values are defaults; all fields stay editable (no read-only flag).
+- All violations are returned together in `fieldErrors` (one entry per invalid field). Prefilled values are defaults; all fields stay editable (no read-only flag). On completion the stored values are replaced by exactly the submitted ones; prefilled values that are not sent are dropped.
 
 ### Error convention
 
@@ -192,6 +192,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - `BAD_CURSOR`: foreign or expired cursor.
 - `INTERNAL`: simulated server error, whole operation or single field.
 - Network failure: HTTP 503 without body.
+- Errors about the request itself keep or get a code too: `GRAPHQL_PARSE_FAILED` and `GRAPHQL_VALIDATION_FAILED` (from graphql-yoga) for documents that don't parse or don't match the schema, `BAD_REQUEST` (HTTP 400) for variables of the wrong type.
 - Structured field errors are deliberately better than the real gateway; the difference is a discussion topic, not something to reproduce.
 
 ### Simulated colleague
@@ -274,4 +275,4 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Research findings with evidence: `specs/research.md` (builder repo only).
 - Our webapp does not distinguish network from GraphQL errors and does not map server field errors into forms. The task asks candidates for exactly that. Legitimate, but worth knowing for the conversation.
 - Our webapp's codegen config contains a hard-coded bearer token and the dev API host. Unrelated to this repo, but should be fixed there.
-- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding. Ticket 04: empty filter values, strict `dueBefore`.
+- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding. Ticket 04: empty filter values, strict `dueBefore`. Ticket 05: blank text counts as missing and is not stored, submitted values replace stored ones, request-level error codes.

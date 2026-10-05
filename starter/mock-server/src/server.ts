@@ -38,6 +38,22 @@ function authPlugin(): Plugin {
   };
 }
 
+/** Errors about the request itself (e.g. a variable of the wrong type) get the code BAD_REQUEST. */
+function requestErrorCodePlugin(): Plugin {
+  return {
+    onResultProcess({ result }) {
+      for (const single of Array.isArray(result) ? result : [result]) {
+        if (!single || typeof single !== 'object' || !('errors' in single) || !Array.isArray(single.errors)) continue;
+        for (const error of single.errors) {
+          if (!error.extensions?.code) {
+            Object.defineProperty(error, 'extensions', { value: { ...error.extensions, code: 'BAD_REQUEST' }, enumerable: true });
+          }
+        }
+      }
+    },
+  };
+}
+
 export function createMockServer(options: MockServerOptions = {}) {
   const config: MockConfig = { ...defaultConfig, ...options.config };
   const clock = options.clock ?? systemClock;
@@ -51,7 +67,7 @@ export function createMockServer(options: MockServerOptions = {}) {
       clock,
       store,
     }),
-    plugins: [controlPlugin(store), authPlugin()],
+    plugins: [controlPlugin(store), authPlugin(), requestErrorCodePlugin()],
     cors: {
       origin: config.corsOrigin,
       methods: ['GET', 'POST', 'OPTIONS'],
