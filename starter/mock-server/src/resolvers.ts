@@ -1,3 +1,4 @@
+import { completeTask, type CompleteTaskInput } from './complete-task.ts';
 import type { Task } from './model.ts';
 import { listTasks, type TaskListArgs } from './task-list.ts';
 import type { MockContext } from './server.ts';
@@ -14,6 +15,10 @@ export const resolvers = {
     tasks: (_: unknown, args: TaskListArgs, { store, clock }: MockContext) =>
       listTasks(store.data.tasks.values(), args, clock),
     task: (_: unknown, { id }: { id: string }, { store }: MockContext) => store.data.tasks.get(id) ?? null,
+  },
+  Mutation: {
+    completeTask: (_: unknown, { input }: { input: CompleteTaskInput }, context: MockContext) =>
+      completeTask(input, context),
   },
   Task: {
     process: (task: Task, __: NoArgs, { store }: MockContext) =>
