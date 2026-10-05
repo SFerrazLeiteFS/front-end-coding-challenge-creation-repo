@@ -241,6 +241,9 @@ importers:
 
   mock-server:
     dependencies:
+      '@whatwg-node/server':
+        specifier: ^0.11.0
+        version: 0.11.0
       graphql:
         specifier: ^17.0.2
         version: 17.0.2

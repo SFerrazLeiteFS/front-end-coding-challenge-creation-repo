@@ -1,4 +1,5 @@
 import { completeTask, type CompleteTaskInput } from './complete-task.ts';
+import { mockError } from './errors.ts';
 import type { Task } from './model.ts';
 import { listTasks, type TaskListArgs } from './task-list.ts';
 import type { MockContext } from './server.ts';
@@ -21,6 +22,10 @@ export const resolvers = {
       completeTask(input, context),
   },
   Task: {
+    assignee: (task: Task, __: NoArgs, { conditions }: MockContext) => {
+      if (conditions.assigneeFails()) throw mockError('INTERNAL', 'The assignee could not be loaded.');
+      return task.assignee;
+    },
     process: (task: Task, __: NoArgs, { store }: MockContext) =>
       store.data.processes.find((process) => process.id === task.processId),
     form: (task: Task, __: NoArgs, { store }: MockContext) => ({ fields: store.data.forms.get(task.processId) }),
