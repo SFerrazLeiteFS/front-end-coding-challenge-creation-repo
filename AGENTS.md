@@ -15,3 +15,9 @@ Canonical five roles with default strings; `offen`/`erledigt` from `/to-tickets`
 ### Domain docs
 
 Single-context: `CONTEXT.md` and `docs/adr/` at the builder repo root, never inside `starter/`. See `docs/agents/domain.md`.
+
+## Workflow
+
+- All coding work (every `/implement` run) happens on its own branch off `main`, one branch per ticket, named `ticket/<NN>-<slug>`.
+- Each ticket ends with a pull request against `main` for Samuel to review. Never commit code directly to `main` and never merge your own PR.
+- Docs-only changes to specs and tickets outside an `/implement` run may go to `main`.
