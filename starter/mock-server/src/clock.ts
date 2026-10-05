@@ -11,6 +11,11 @@ export const systemClock: Clock = {
   clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
 };
 
+interface Timer {
+  at: number;
+  callback: () => void;
+}
+
 export interface ManualClock extends Clock {
   /** Moves time forward and runs every timer that falls due, in order. */
   advance(ms: number): void;
@@ -20,7 +25,7 @@ export interface ManualClock extends Clock {
 export function createManualClock(start = Date.UTC(2026, 0, 1)): ManualClock {
   let now = start;
   let nextId = 1;
-  const timers = new Map<number, { at: number; callback: () => void }>();
+  const timers = new Map<number, Timer>();
 
   return {
     now: () => now,
@@ -36,7 +41,7 @@ export function createManualClock(start = Date.UTC(2026, 0, 1)): ManualClock {
       const target = now + ms;
       for (;;) {
         let dueId: number | undefined;
-        let due: { at: number; callback: () => void } | undefined;
+        let due: Timer | undefined;
         for (const [id, timer] of timers) {
           if (timer.at <= target && (!due || timer.at < due.at)) {
             dueId = id;

@@ -4,7 +4,7 @@ type Query {
   viewer: User!
   processes: [Process!]!
   tasks(first: Int = 20, after: String, filter: TaskFilter, sort: TaskSort = DUE_ASC): TaskConnection!
-  task(id: ID!): Task          # null for unknown IDs
+  task(id: ID!): Task          # null for unknown IDs, no error
 }
 
 type Mutation {

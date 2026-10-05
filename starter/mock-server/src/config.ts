@@ -17,9 +17,9 @@ export interface MockConfig {
   unavailableRate: number;
   /** Share of operations failing with an internal error. [MOCK_INTERNAL_RATE] */
   internalRate: number;
-  /** Share of assignee lookups failing on their own. [MOCK_PARTIAL_RATE] */
+  /** Share of `assignee` fields resolved with an error. [MOCK_PARTIAL_RATE] */
   partialRate: number;
-  /** Share of completed tasks whose response does not arrive. [MOCK_LOST_RESPONSE_RATE] */
+  /** Share of completions answered with HTTP 503 after being saved. [MOCK_LOST_RESPONSE_RATE] */
   lostResponseRate: number;
   /** Interval in ms in which a colleague works on a task. [MOCK_FOREIGN_EDIT_INTERVAL_MS] */
   foreignEditIntervalMs: number;
@@ -51,6 +51,17 @@ export function configFromEnv(env: Record<string, string | undefined> = process.
     if (Number.isNaN(parsed)) throw new Error(`${name} must be a number, got "${value}"`);
     return parsed;
   };
+  const integer = (name: string, fallback: number) => {
+    const value = number(name, fallback);
+    if (!Number.isInteger(value)) throw new Error(`${name} must be a whole number, got ${value}`);
+    return value;
+  };
+  const onOff = (name: string, fallback: boolean) => {
+    const value = env[name]?.toLowerCase();
+    if (value === undefined || value === '') return fallback;
+    if (value !== 'on' && value !== 'off') throw new Error(`${name} must be "on" or "off", got "${env[name]}"`);
+    return value === 'on';
+  };
   const rate = (name: string, fallback: number) => {
     const value = number(name, fallback);
     if (value < 0 || value > 1) throw new Error(`${name} must be between 0 and 1, got ${value}`);
@@ -67,22 +78,22 @@ export function configFromEnv(env: Record<string, string | undefined> = process.
     return [min, max];
   };
 
-  const taskCount = number('MOCK_TASK_COUNT', defaultConfig.taskCount);
+  const taskCount = integer('MOCK_TASK_COUNT', defaultConfig.taskCount);
   if (taskCount < 1 || taskCount > MAX_TASK_COUNT) {
     throw new Error(`MOCK_TASK_COUNT must be between 1 and ${MAX_TASK_COUNT}, got ${taskCount}`);
   }
 
   return {
-    port: number('MOCK_PORT', defaultConfig.port),
-    seed: number('MOCK_SEED', defaultConfig.seed),
-    chaos: (env.MOCK_CHAOS ?? 'on').toLowerCase() !== 'off',
+    port: integer('MOCK_PORT', defaultConfig.port),
+    seed: integer('MOCK_SEED', defaultConfig.seed),
+    chaos: onOff('MOCK_CHAOS', defaultConfig.chaos),
     taskCount,
     latencyMs: range('MOCK_LATENCY_MS', defaultConfig.latencyMs),
     unavailableRate: rate('MOCK_UNAVAILABLE_RATE', defaultConfig.unavailableRate),
     internalRate: rate('MOCK_INTERNAL_RATE', defaultConfig.internalRate),
     partialRate: rate('MOCK_PARTIAL_RATE', defaultConfig.partialRate),
     lostResponseRate: rate('MOCK_LOST_RESPONSE_RATE', defaultConfig.lostResponseRate),
-    foreignEditIntervalMs: number('MOCK_FOREIGN_EDIT_INTERVAL_MS', defaultConfig.foreignEditIntervalMs),
+    foreignEditIntervalMs: integer('MOCK_FOREIGN_EDIT_INTERVAL_MS', defaultConfig.foreignEditIntervalMs),
     corsOrigin: env.MOCK_CORS_ORIGIN ?? defaultConfig.corsOrigin,
   };
 }

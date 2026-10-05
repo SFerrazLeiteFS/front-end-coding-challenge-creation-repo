@@ -36,6 +36,11 @@ describe('configuration from environment', () => {
     });
   });
 
+  it('accepts on and off for the realistic-conditions switch in any case', () => {
+    expect(configFromEnv({ MOCK_CHAOS: 'OFF' }).chaos).toBe(false);
+    expect(configFromEnv({ MOCK_CHAOS: 'on' }).chaos).toBe(true);
+  });
+
   it('accepts a single latency value', () => {
     expect(configFromEnv({ MOCK_LATENCY_MS: '500' }).latencyMs).toEqual([500, 500]);
   });
@@ -47,6 +52,10 @@ describe('configuration from environment', () => {
     ['MOCK_LATENCY_MS', 'fast'],
     ['MOCK_TASK_COUNT', '10001'],
     ['MOCK_TASK_COUNT', '0'],
+    ['MOCK_TASK_COUNT', '2.5'],
+    ['MOCK_PORT', '3.7'],
+    ['MOCK_CHAOS', 'false'],
+    ['MOCK_CHAOS', '0'],
   ])('rejects %s=%s with a clear message', (name, value) => {
     expect(() => configFromEnv({ [name]: value })).toThrow(name);
   });

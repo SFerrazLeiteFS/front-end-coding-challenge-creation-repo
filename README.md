@@ -11,6 +11,13 @@ This repo itself is **never** shared with candidates. Only the contents of `star
 3. `/to-tickets`: tickets go to `tickets/`.
 4. `/implement`: one ticket per run.
 
+## Running the builder tests
+
+```
+pnpm setup   # installs starter/ and the builder test tooling
+pnpm test    # builder tests against starter/mock-server
+```
+
 ## Contents
 
 | Path | Purpose |
@@ -20,6 +27,7 @@ This repo itself is **never** shared with candidates. Only the contents of `star
 | `docs/task.md` | Draft of the candidate-facing task description, becomes `starter/README.md` |
 | `specs/` | created during the grilling session |
 | `tickets/` | created by `/to-tickets` |
+| `tests/` | builder-only tests proving the starter supports the task |
 | `starter/` | created during implementation, the only part that ships |
 
 ## Language
