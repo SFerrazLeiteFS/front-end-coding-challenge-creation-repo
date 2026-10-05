@@ -1,7 +1,8 @@
 import { completeTask, type CompleteTaskInput } from './complete-task.ts';
 import { mockError } from './errors.ts';
+import type { TaskEvent } from './events.ts';
 import type { Task } from './model.ts';
-import { listTasks, type TaskListArgs } from './task-list.ts';
+import { listTasks, type TaskFilter, type TaskListArgs } from './task-list.ts';
 import type { MockContext } from './server.ts';
 
 type NoArgs = Record<string, never>;
@@ -20,6 +21,13 @@ export const resolvers = {
   Mutation: {
     completeTask: (_: unknown, { input }: { input: CompleteTaskInput }, context: MockContext) =>
       completeTask(input, context),
+  },
+  Subscription: {
+    taskEvents: {
+      subscribe: (_: unknown, { filter }: { filter?: TaskFilter | null }, { streams }: MockContext) =>
+        streams.taskEvents(filter),
+      resolve: (event: TaskEvent) => event,
+    },
   },
   Task: {
     assignee: (task: Task, __: NoArgs, { conditions }: MockContext) => {

@@ -1,5 +1,5 @@
 import type { FormField, Priority, Process, Task, TaskStatus, User } from '../model.ts';
-import { createRandom } from '../random.ts';
+import { createRandom, type Random } from '../random.ts';
 import { DAY, HOUR, iso, startOfDay } from '../time.ts';
 import { processDefinitions } from './processes.ts';
 import { team } from './team.ts';
@@ -9,6 +9,40 @@ export interface DataSet {
   forms: Map<string, FormField[]>;
   team: User[];
   tasks: Map<string, Task>;
+  /** Number for the next task that gets created. */
+  nextTaskNumber: number;
+}
+
+const weightedPriorities: [Priority, number][] = [
+  ['LOW', 20],
+  ['NORMAL', 50],
+  ['HIGH', 22],
+  ['URGENT', 8],
+];
+
+const sampleAssignee = (random: Random) => (random.chance(0.75) ? random.pick(team) : null);
+const sampleDueAt = (random: Random, createdAt: number) =>
+  random.chance(0.85) ? iso(startOfDay(createdAt) + random.int(2, 45) * DAY + 17 * HOUR) : null;
+
+/** A new open task, created right now (e.g. by a colleague). */
+export function createOpenTask(random: Random, data: DataSet, now: number): Task {
+  const definition = random.weighted(processDefinitions.map((d) => [d, d.weight] as const));
+  const { title, values } = definition.sampleTask(random, startOfDay(now), data.forms.get(definition.process.id)!);
+  const id = taskId(data.nextTaskNumber++);
+  return {
+    id,
+    version: 1,
+    title,
+    processId: definition.process.id,
+    status: 'OPEN',
+    priority: random.weighted(weightedPriorities),
+    assignee: sampleAssignee(random),
+    createdAt: iso(now),
+    dueAt: sampleDueAt(random, now),
+    completedBy: null,
+    completedAt: null,
+    values,
+  };
 }
 
 export const taskId = (n: number) => `task-${String(n).padStart(4, '0')}`;
@@ -35,14 +69,9 @@ export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCo
       ['COMPLETED', 25],
       ['CANCELLED', 10],
     ]);
-    const priority = random.weighted<Priority>([
-      ['LOW', 20],
-      ['NORMAL', 50],
-      ['HIGH', 22],
-      ['URGENT', 8],
-    ]);
-    const assignee = random.chance(0.75) ? random.pick(team) : null;
-    const dueAt = random.chance(0.85) ? iso(startOfDay(createdAt) + random.int(2, 45) * DAY + 17 * HOUR) : null;
+    const priority = random.weighted(weightedPriorities);
+    const assignee = sampleAssignee(random);
+    const dueAt = sampleDueAt(random, createdAt);
     const completed = status === 'COMPLETED';
 
     tasks.set(taskId(n), {
@@ -61,5 +90,5 @@ export function generateDataSet({ seed, taskCount, now }: { seed: number; taskCo
     });
   }
 
-  return { processes: processDefinitions.map((d) => d.process), forms, team, tasks };
+  return { processes: processDefinitions.map((d) => d.process), forms, team, tasks, nextTaskNumber: taskCount + 1 };
 }

@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { createSchema, createYoga, type Plugin } from 'graphql-yoga';
 import { viewerFromAuthorization, type Viewer } from './auth.ts';
 import { systemClock, type Clock } from './clock.ts';
+import { startColleague } from './colleague.ts';
 import { createConditions, noConditions, type RequestConditions } from './conditions.ts';
 import { defaultConfig, type MockConfig } from './config.ts';
+import { createEvents, type Events } from './events.ts';
 import { createHttpHandler, type ServerContext } from './http.ts';
 import { resolvers } from './resolvers.ts';
 import { createStore, type Store } from './store.ts';
+import { createStreams, type Streams } from './streams.ts';
 
 export interface MockContext {
   viewer: Viewer;
@@ -14,6 +17,8 @@ export interface MockContext {
   clock: Clock;
   store: Store;
   conditions: RequestConditions;
+  events: Events;
+  streams: Streams;
 }
 
 export interface MockServerOptions {
@@ -64,6 +69,9 @@ export function createMockServer(options: MockServerOptions = {}) {
   const log = options.log ?? ((line: string) => console.log(line));
   const store = createStore(config, clock);
   const conditions = createConditions(config);
+  const events = createEvents();
+  const streams = createStreams({ config, clock, events });
+  const colleague = startColleague({ config, clock, store, events });
 
   const yoga = createYoga<ServerContext, MockContext>({
     schema: createSchema<MockContext>({ typeDefs, resolvers }),
@@ -73,6 +81,8 @@ export function createMockServer(options: MockServerOptions = {}) {
       clock,
       store,
       conditions: requestConditions ?? noConditions(),
+      events,
+      streams,
     }),
     plugins: [authPlugin(), requestErrorCodePlugin()],
     cors: {
@@ -87,7 +97,13 @@ export function createMockServer(options: MockServerOptions = {}) {
     logging: 'warn',
   });
 
-  const handler = createHttpHandler({ yoga, config, store, conditions, log });
+  const resetAll = () => {
+    store.reset();
+    conditions.reset();
+    streams.reset();
+    colleague.reset();
+  };
+  const handler = createHttpHandler({ yoga, config, conditions, log, control: { config, store, events, resetAll, addTrigger: conditions.addTrigger } });
 
   return {
     config,
@@ -95,6 +111,8 @@ export function createMockServer(options: MockServerOptions = {}) {
     fetch: async (request: Request): Promise<Response> => handler.fetch(request),
     /** Node.js request listener for `http.createServer`. */
     requestListener: handler,
+    /** Stops the simulated colleague, e.g. at the end of a test. */
+    stop: () => colleague.stop(),
   };
 }
 

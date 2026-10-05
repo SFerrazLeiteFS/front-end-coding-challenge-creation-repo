@@ -50,7 +50,7 @@ function compareKeys(a: SortKey, b: SortKey) {
 }
 
 /** The filter as it is applied: empty values removed, lists deduplicated and sorted, dates parsed. */
-interface NormalizedFilter {
+export interface NormalizedFilter {
   status: TaskStatus[] | null;
   priority: Priority[] | null;
   processId: string | null;
@@ -58,7 +58,7 @@ interface NormalizedFilter {
   dueBefore: number | null;
 }
 
-function normalizeFilter(filter: TaskFilter | null | undefined): NormalizedFilter {
+export function normalizeFilter(filter: TaskFilter | null | undefined): NormalizedFilter {
   const list = <T extends string>(values?: T[] | null) => (values?.length ? [...new Set(values)].sort() : null);
   let dueBefore: number | null = null;
   if (filter?.dueBefore) {
@@ -78,7 +78,7 @@ function normalizeFilter(filter: TaskFilter | null | undefined): NormalizedFilte
   };
 }
 
-function matches(task: Task, filter: NormalizedFilter) {
+export function matches(task: Task, filter: NormalizedFilter) {
   if (filter.status && !filter.status.includes(task.status)) return false;
   if (filter.priority && !filter.priority.includes(task.priority)) return false;
   if (filter.processId && task.processId !== filter.processId) return false;
