@@ -8,11 +8,8 @@
 | `ready-for-human`         | `ready-for-human`   | Requires human implementation            |
 | `wontfix`                 | `wontfix`           | Will not be actioned                     |
 
-## Mapping from `/to-tickets` and `/implement`
+## Terminal state
 
-These skills write `status: offen` and `status: erledigt`. Treat them as:
-
-- `offen` → `ready-for-agent` if `bearbeiter` names an agent, otherwise `ready-for-human`
-- `erledigt` → done (terminal state, outside the triage roles)
+A finished ticket gets `status: done` (outside the five triage roles). Skills that would write other values (e.g. German `offen`/`erledigt`) must use these English strings instead: `ready-for-agent`/`ready-for-human` for open tickets, `done` for finished ones.
 
 When a skill mentions a role, use the string from the table above.
