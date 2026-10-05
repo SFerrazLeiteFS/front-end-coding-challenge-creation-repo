@@ -1,6 +1,6 @@
 # Notes
 
-One page max. Bullet points are fine.
+Please be concise. Bullet points are fine.
 
 ## Decisions
 

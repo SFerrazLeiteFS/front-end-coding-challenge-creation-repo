@@ -23,7 +23,7 @@ You don't need prior experience with GraphQL or urql. If you prefer a different 
 2. **Detail view** with a form you render from the task's field schema, including validation.
 3. **Completing a task** with sensible error and conflict handling.
 4. **Tests** where you consider them relevant. A few good ones beat many.
-5. **`NOTES.md`**, one page max: your decisions, trade-offs, what you deliberately left out and what you would do next. Also, what you used AI tools for.
+5. **`NOTES.md`**: your decisions, trade-offs, what you deliberately left out and what you would do next. Also, what you used AI tools for.
 
 Anything beyond that is optional. Visual design doesn't matter here; a plain, usable interface is enough.
 
@@ -41,7 +41,7 @@ Within one week, as a link to a private repo (with access for the address in you
 
 ## What happens next
 
-In the follow-up conversation (about 60 minutes) you briefly walk us through your solution. Then we extend it together: 20 to 30 minutes of pairing on your code, with a change we only show you during the session. You work on your own machine with your usual tools. At the end there's time for your questions to us.
+In the follow-up conversation (about 60 minutes) you briefly walk us through your solution. Then we extend it together: 40 minutes of pairing on your code, with a change we only show you during the session. You work on your own machine with your usual tools. At the end there's time for your questions to us.
 
 If you have questions about the assignment, reach out to s.ferraz-leite@firestart.com at any time.
 
