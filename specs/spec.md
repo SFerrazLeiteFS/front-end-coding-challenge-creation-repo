@@ -1,7 +1,7 @@
 ---
 title: Starter repo for the Approval Inbox take-home
 status: ready-for-agent
-version: 1
+version: 2
 date: 2026-10-05
 sources: BRIEFING.md (v2), schema-and-mock.md (v2), task.md, specs/research.md, grilling session 2026-10-05
 ---
@@ -128,7 +128,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Realistic conditions (latency, unavailability, internal errors, partial data, lost responses) are applied centrally in a plugin layer, not in resolvers.
 - Defaults: latency 300 to 1500 ms uniform, 5 % HTTP 503, 2 % internal error for the whole operation, 3 % of `assignee` resolvers return null plus an error with path, 2 % of completions persist but respond 503, simulated colleague every 8 s, 250 tasks (max 10,000).
 - One switch disables latency, all failure injection and the simulated colleague. With it off, responses are stable and immediate.
-- Randomness: the data set is fully derived from the seed. Behaviours are tested via rates of 0 or 1 and on-demand triggers, never by luck. Intermediate rates are reproducible only for sequential requests with the same seed; this is the documented limit.
+- Randomness: the data set is derived from the seed and the current UTC day. All dates (created, due, prefilled dates, date limits in forms) are relative to the start of that day, so the data looks current and stays identical all day; a reset on another day shifts the dates but keeps everything else. Behaviours are tested via rates of 0 or 1 and on-demand triggers, never by luck. Intermediate rates are reproducible only for sequential requests with the same seed; this is the documented limit.
 - One injectable clock drives cursor expiry, the colleague interval and stream lifetime.
 - Aborted requests are logged to the console with the operation name. No further behaviour.
 
@@ -174,7 +174,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 
 - Required means a value is present. Empty text and empty selection count as missing.
 - Text: max length; pattern is a JavaScript regex without flags, matched against the whole value.
-- Number: min and max inclusive; step relative to min (or zero).
+- Number: min and max inclusive; step relative to min (or zero), with a small tolerance for floating-point rounding (e.g. 533.54 with step 0.01 is valid).
 - Date: min and max inclusive, date-time values.
 - Select: every value must be an option; exactly one when not multiple.
 - Boolean: required means the value must be true (confirmation checkbox).
@@ -274,4 +274,4 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Research findings with evidence: `specs/research.md` (builder repo only).
 - Our webapp does not distinguish network from GraphQL errors and does not map server field errors into forms. The task asks candidates for exactly that. Legitimate, but worth knowing for the conversation.
 - Our webapp's codegen config contains a hard-coded bearer token and the dev API host. Unrelated to this repo, but should be fixed there.
-- Change log: version 1, 2026-10-05, from grilling session.
+- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding.

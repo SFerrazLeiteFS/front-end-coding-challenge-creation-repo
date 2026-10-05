@@ -161,7 +161,7 @@ Outside GraphQL errors:
 
 ## Mock behaviour
 
-graphql-yoga, separate process on port 4000, `/graphql`, CORS for the web app on port 3000, state in memory. The data set is fully derived from `MOCK_SEED`. `MOCK_CHAOS=off` disables latency, all failure injection and the simulated colleague. One injectable clock drives cursor expiry, colleague interval and stream lifetime.
+graphql-yoga, separate process on port 4000, `/graphql`, CORS for the web app on port 3000, state in memory. The data set is derived from `MOCK_SEED` and the current UTC day (dates are relative to today). `MOCK_CHAOS=off` disables latency, all failure injection and the simulated colleague. One injectable clock drives cursor expiry, colleague interval and stream lifetime.
 
 | Behaviour | Default | Env | What it exercises |
 |---|---|---|---|
