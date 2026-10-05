@@ -21,7 +21,6 @@ export function completeTask(
       currentStatus: task.status,
     });
   }
-  // Someone else changed the task just now.
   if (conditions.conflict) task.version += 1;
   if (task.version !== input.expectedVersion) {
     throw mockError('CONFLICT', `Task ${task.id} has changed since version ${input.expectedVersion}.`, {
@@ -45,6 +44,6 @@ export function completeTask(
     completedAt: iso(clock.now()),
     values: toFieldValues(fields, input.values),
   });
-  if (conditions.loseResponse) conditions.responseLost = true;
+  if (conditions.loseResponse) conditions.answerUnavailable = true;
   return { task };
 }

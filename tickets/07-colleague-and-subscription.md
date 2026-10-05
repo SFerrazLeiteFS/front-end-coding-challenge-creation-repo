@@ -21,3 +21,4 @@ spec: specs/spec.md (Simulated colleague, Subscription)
 ## Comments
 
 - From ticket 05: `completeTask` mutates the stored task object in place. Snapshot (copy) the task when emitting events, so a later change does not alter an event already sent.
+- From ticket 06: `MOCK_CHAOS` can be switched at runtime via `/__mock/config`. The colleague and the stream lifetime must read `config.chaos` when they act, not only at start. `conditions.reset()` exists for reset; the colleague's own random sequence should restart on reset too.

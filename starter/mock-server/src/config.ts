@@ -45,46 +45,49 @@ export const defaultConfig: MockConfig = {
 
 export const MAX_TASK_COUNT = 10_000;
 
+/** An option has an invalid value or can't be changed. */
+export class ConfigError extends Error {}
+
 type Parser<T> = (name: string, value: unknown) => T;
 
 function number(name: string, value: unknown) {
   const parsed = typeof value === 'number' ? value : Number(value);
   if (typeof value === 'boolean' || value === '' || Number.isNaN(parsed)) {
-    throw new Error(`${name} must be a number, got "${value}"`);
+    throw new ConfigError(`${name} must be a number, got "${value}"`);
   }
   return parsed;
 }
 
 function integer(name: string, value: unknown) {
   const parsed = number(name, value);
-  if (!Number.isInteger(parsed)) throw new Error(`${name} must be a whole number, got ${parsed}`);
+  if (!Number.isInteger(parsed)) throw new ConfigError(`${name} must be a whole number, got ${parsed}`);
   return parsed;
 }
 
 const rate: Parser<number> = (name, value) => {
   const parsed = number(name, value);
-  if (parsed < 0 || parsed > 1) throw new Error(`${name} must be between 0 and 1, got ${parsed}`);
+  if (parsed < 0 || parsed > 1) throw new ConfigError(`${name} must be between 0 and 1, got ${parsed}`);
   return parsed;
 };
 
 const onOff: Parser<boolean> = (name, value) => {
   const text = String(value).toLowerCase();
-  if (text !== 'on' && text !== 'off') throw new Error(`${name} must be "on" or "off", got "${value}"`);
+  if (text !== 'on' && text !== 'off') throw new ConfigError(`${name} must be "on" or "off", got "${value}"`);
   return text === 'on';
 };
 
 const range: Parser<[number, number]> = (name, value) => {
   const match = /^(\d+)(?:-(\d+))?$/.exec(String(value));
-  if (!match) throw new Error(`${name} must look like "300-1500" or "500", got "${value}"`);
+  if (!match) throw new ConfigError(`${name} must look like "300-1500" or "500", got "${value}"`);
   const min = Number(match[1]);
   const max = Number(match[2] ?? match[1]);
-  if (max < min) throw new Error(`${name} max must not be below min, got "${value}"`);
+  if (max < min) throw new ConfigError(`${name} max must not be below min, got "${value}"`);
   return [min, max];
 };
 
 const taskCount: Parser<number> = (name, value) => {
   const parsed = integer(name, value);
-  if (parsed < 1 || parsed > MAX_TASK_COUNT) throw new Error(`${name} must be between 1 and ${MAX_TASK_COUNT}, got ${parsed}`);
+  if (parsed < 1 || parsed > MAX_TASK_COUNT) throw new ConfigError(`${name} must be between 1 and ${MAX_TASK_COUNT}, got ${parsed}`);
   return parsed;
 };
 
@@ -131,8 +134,8 @@ export function runtimeChanges(body: Record<string, unknown>): Partial<MockConfi
   const changes: Partial<MockConfig> = {};
   for (const [name, value] of Object.entries(body)) {
     const option = settings[name];
-    if (!option) throw new Error(`Unknown option ${name}`);
-    if (!option.runtime) throw new Error(`${name} can only be set when starting the server`);
+    if (!option) throw new ConfigError(`Unknown option ${name}`);
+    if (!option.runtime) throw new ConfigError(`${name} can only be set when starting the server`);
     Object.assign(changes, { [option.key]: option.parse(name, value) });
   }
   return changes;

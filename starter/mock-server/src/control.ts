@@ -1,4 +1,4 @@
-import { describeConfig, runtimeChanges, type MockConfig } from './config.ts';
+import { ConfigError, describeConfig, runtimeChanges, type MockConfig } from './config.ts';
 import { behaviors, type Conditions, type Trigger } from './conditions.ts';
 import type { Store } from './store.ts';
 
@@ -39,7 +39,7 @@ export async function handleControl(request: Request, path: string, { config, st
   const routes: Record<string, (body: Record<string, unknown>) => unknown> = {
     'POST /__mock/reset': () => {
       store.reset();
-      conditions.clearTriggers();
+      conditions.reset();
       return { ok: true };
     },
     'POST /__mock/config': (body) => {
@@ -58,7 +58,7 @@ export async function handleControl(request: Request, path: string, { config, st
   try {
     return Response.json(route(await readJson(request)));
   } catch (error) {
-    if (error instanceof BadRequest || error instanceof Error) {
+    if (error instanceof BadRequest || error instanceof ConfigError) {
       return Response.json({ message: error.message }, { status: 400 });
     }
     throw error;

@@ -1,7 +1,9 @@
 import { createServerAdapter } from '@whatwg-node/server';
+import { viewerFromAuthorization } from './auth.ts';
 import type { MockConfig } from './config.ts';
 import type { Conditions, RequestConditions } from './conditions.ts';
 import { handleControl } from './control.ts';
+import { mockError } from './errors.ts';
 import { describeRequest, readRequestInfo } from './request-info.ts';
 import type { Store } from './store.ts';
 
@@ -43,7 +45,10 @@ export function createHttpHandler({ yoga, config, store, conditions, log }: Hand
     if (url.pathname.startsWith('/__mock/')) return handleControl(request, url.pathname, { config, store, conditions });
 
     const isGraphiQL = request.method === 'GET' && request.headers.get('accept')?.includes('text/html');
-    if (url.pathname !== '/graphql' || request.method === 'OPTIONS' || isGraphiQL) return yoga.fetch(request, {});
+    const unauthenticated = !viewerFromAuthorization(request.headers.get('authorization'));
+    if (url.pathname !== '/graphql' || request.method === 'OPTIONS' || isGraphiQL || unauthenticated) {
+      return yoga.fetch(request, {});
+    }
 
     const info = await readRequestInfo(request);
     const names = [info.operationName, ...info.rootFields].filter((name): name is string => !!name);
@@ -60,13 +65,14 @@ export function createHttpHandler({ yoga, config, store, conditions, log }: Hand
     try {
       if (current.unavailable) return unavailable(request);
       if (current.internal) {
+        const error = mockError('INTERNAL', 'Internal error.');
         return Response.json(
-          { data: null, errors: [{ message: 'Internal error.', extensions: { code: 'INTERNAL' } }] },
+          { data: null, errors: [{ message: error.message, extensions: error.extensions }] },
           { headers: corsHeaders(request) },
         );
       }
       const response = await yoga.fetch(request, { conditions: current });
-      return current.responseLost ? unavailable(request) : response;
+      return current.answerUnavailable ? unavailable(request) : response;
     } finally {
       answered = true;
     }

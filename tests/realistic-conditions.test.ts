@@ -282,4 +282,58 @@ describe('next-request trigger', () => {
 
     expect((await mock.control('next', body)).response.status).toBe(400);
   });
+
+  it('keeps a completion-only behaviour for the next completion, even without an operation', async () => {
+    const mock = setup();
+    const task = await openInvoice(mock);
+    await mock.control('next', { behavior: 'lost-response' });
+
+    expect((await mock.send(VIEWER)).status).toBe(200);
+    expect((await mock.send(COMPLETE, completeInput(task))).status).toBe(503);
+  });
+
+  it('does not spend a trigger on a request without token', async () => {
+    const mock = setup();
+    await mock.control('next', { behavior: 'unavailable' });
+
+    expect((await mock.send(VIEWER, {}, { token: null })).status).toBe(401);
+    expect((await mock.send(VIEWER)).status).toBe(503);
+  });
+});
+
+describe('requests without token', () => {
+  it('always get HTTP 401, whatever the rates', async () => {
+    const mock = setup({ ...calm, unavailableRate: 1, internalRate: 1, latencyMs: [500, 500] });
+    const started = Date.now();
+
+    expect((await mock.send(VIEWER, {}, { token: null })).status).toBe(401);
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+});
+
+describe('reset', () => {
+  it('replays the same random sequence after a reset', async () => {
+    const mock = setup({ ...calm, unavailableRate: 0.5 });
+    const statuses = async () => {
+      const result = [];
+      for (let i = 0; i < 12; i++) result.push((await mock.send(VIEWER)).status);
+      return result;
+    };
+
+    const first = await statuses();
+    await mock.control('reset');
+    const again = await statuses();
+
+    expect(new Set(first)).toEqual(new Set([200, 503]));
+    expect(again).toEqual(first);
+  });
+
+  it('drops pending triggers', async () => {
+    const mock = setup();
+    await mock.control('next', { behavior: 'unavailable' });
+
+    await mock.control('reset');
+
+    expect((await mock.send(VIEWER)).status).toBe(200);
+  });
 });

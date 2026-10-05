@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createSchema, createYoga, type Plugin } from 'graphql-yoga';
 import { viewerFromAuthorization, type Viewer } from './auth.ts';
 import { systemClock, type Clock } from './clock.ts';
-import { createConditions, type RequestConditions } from './conditions.ts';
+import { createConditions, noConditions, type RequestConditions } from './conditions.ts';
 import { defaultConfig, type MockConfig } from './config.ts';
 import { createHttpHandler, type ServerContext } from './http.ts';
 import { resolvers } from './resolvers.ts';
@@ -24,19 +24,6 @@ export interface MockServerOptions {
 }
 
 const typeDefs = readFileSync(new URL('../../schema/schema.graphql', import.meta.url), 'utf8');
-
-/** Used for requests that bypass the HTTP handler's conditions. */
-const noConditions: RequestConditions = {
-  delayMs: 0,
-  unavailable: false,
-  internal: false,
-  failAssignees: false,
-  conflict: false,
-  validation: false,
-  loseResponse: false,
-  responseLost: false,
-  assigneeFails: () => false,
-};
 
 function authPlugin(): Plugin {
   return {
@@ -85,7 +72,7 @@ export function createMockServer(options: MockServerOptions = {}) {
       config,
       clock,
       store,
-      conditions: requestConditions ?? noConditions,
+      conditions: requestConditions ?? noConditions(),
     }),
     plugins: [authPlugin(), requestErrorCodePlugin()],
     cors: {
