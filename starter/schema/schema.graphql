@@ -1,0 +1,106 @@
+scalar DateTime
+
+type Query {
+  viewer: User!
+  processes: [Process!]!
+  tasks(first: Int = 20, after: String, filter: TaskFilter, sort: TaskSort = DUE_ASC): TaskConnection!
+  task(id: ID!): Task          # null for unknown IDs
+}
+
+type Mutation {
+  completeTask(input: CompleteTaskInput!): CompleteTaskPayload!
+}
+
+type Subscription {
+  taskEvents(filter: TaskFilter): TaskEvent!   # served over SSE
+}
+
+input TaskFilter {
+  status: [TaskStatus!]
+  priority: [Priority!]
+  processId: ID
+  search: String
+  dueBefore: DateTime
+}
+
+enum TaskStatus { OPEN IN_PROGRESS COMPLETED CANCELLED }
+enum Priority { LOW NORMAL HIGH URGENT }
+enum TaskSort { DUE_ASC DUE_DESC CREATED_DESC PRIORITY_DESC }
+
+type TaskConnection {
+  edges: [TaskEdge!]!
+  nodes: [Task!]!
+  pageInfo: PageInfo!
+}
+type TaskEdge { cursor: String!, node: Task! }
+type PageInfo { hasNextPage: Boolean!, endCursor: String }
+
+type User { id: ID!, displayName: String! }
+type Process { id: ID!, name: String! }
+
+type Task {
+  id: ID!
+  version: Int!
+  title: String!
+  process: Process!
+  status: TaskStatus!
+  priority: Priority!
+  assignee: User
+  createdAt: DateTime!
+  dueAt: DateTime
+  completedBy: User
+  completedAt: DateTime
+  form: FormSchema!
+  values: [FieldValue!]!
+}
+
+type FormSchema { fields: [FormField!]! }
+
+interface FormField {
+  key: ID!
+  label: String!
+  required: Boolean!
+  helpText: String
+}
+type TextField implements FormField     { key: ID!, label: String!, required: Boolean!, helpText: String, multiline: Boolean!, maxLength: Int, pattern: String }
+type NumberField implements FormField   { key: ID!, label: String!, required: Boolean!, helpText: String, min: Float, max: Float, step: Float, unit: String }
+type DateField implements FormField     { key: ID!, label: String!, required: Boolean!, helpText: String, min: DateTime, max: DateTime }
+type SelectField implements FormField   { key: ID!, label: String!, required: Boolean!, helpText: String, options: [SelectOption!]!, multiple: Boolean! }
+type BooleanField implements FormField  { key: ID!, label: String!, required: Boolean!, helpText: String }
+type DecisionField implements FormField { key: ID!, label: String!, required: Boolean!, helpText: String, allowed: [Decision!]!, commentRequiredFor: [Decision!]!, commentFieldKey: ID! }
+
+type SelectOption { value: String!, label: String! }
+enum Decision { APPROVE REJECT RETURN }
+
+union FieldValue = TextValue | NumberValue | DateValue | SelectValue | BooleanValue | DecisionValue
+type TextValue     { key: ID!, text: String! }
+type NumberValue   { key: ID!, number: Float! }
+type DateValue     { key: ID!, date: DateTime! }
+type SelectValue   { key: ID!, selected: [String!]! }
+type BooleanValue  { key: ID!, bool: Boolean! }
+type DecisionValue { key: ID!, decision: Decision! }
+
+input CompleteTaskInput {
+  taskId: ID!
+  expectedVersion: Int!
+  values: [FieldValueInput!]!
+}
+
+# Exactly one value field must be set.
+input FieldValueInput {
+  key: ID!
+  text: String
+  number: Float
+  date: DateTime
+  selected: [String!]
+  bool: Boolean
+  decision: Decision
+}
+
+type CompleteTaskPayload { task: Task! }
+
+type TaskEvent {
+  kind: TaskEventKind!
+  task: Task!              # last state for REMOVED
+}
+enum TaskEventKind { CREATED UPDATED COMPLETED REMOVED }
