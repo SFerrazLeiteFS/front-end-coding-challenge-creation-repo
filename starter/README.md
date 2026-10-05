@@ -65,6 +65,6 @@ Other scripts in the root:
 
 | Script | What it does |
 |---|---|
-| `pnpm test` | runs the tests of all packages |
+| `pnpm test` | runs the tests (Vitest) |
 | `pnpm codegen` | regenerates the typed GraphQL documents in `apps/web/src/gql` from the schema |
 | `pnpm mock` | starts only the mock server |
