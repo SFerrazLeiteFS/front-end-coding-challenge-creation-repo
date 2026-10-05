@@ -160,7 +160,7 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Shared team inbox: every viewer sees the same tasks. `tasks` does not filter by viewer. `assignee` is informational: one of about five fixed team members, or null.
 - Anyone may complete any open task. No permission checks, no forbidden error.
 - Completion allowed from `OPEN` and `IN_PROGRESS`. `IN_PROGRESS` only comes from the seed or the colleague. No claim mutation.
-- Filter semantics: OR within a field, AND across fields. Search is a case-insensitive substring match on title; empty string means no filter. `dueBefore` excludes tasks without due date.
+- Filter semantics: OR within a field, AND across fields. Empty lists and empty strings mean no filter. Search is a case-insensitive substring match on title (not trimmed). `dueBefore` must be an ISO 8601 date-time with time zone (otherwise `VALIDATION_FAILED` with a field error for `dueBefore`) and excludes tasks without due date.
 - Sorting: tasks without due date always last for due-date sorts. Ties broken by ID.
 - Six processes with one fixed form variant each (e.g. invoice, leave, contract, purchase order, expenses, onboarding). Together they use every field type. At least two use a decision field with a required comment on reject.
 
@@ -274,4 +274,4 @@ The mock documents only what a candidate needs to work (start, token, switching 
 - Research findings with evidence: `specs/research.md` (builder repo only).
 - Our webapp does not distinguish network from GraphQL errors and does not map server field errors into forms. The task asks candidates for exactly that. Legitimate, but worth knowing for the conversation.
 - Our webapp's codegen config contains a hard-coded bearer token and the dev API host. Unrelated to this repo, but should be fixed there.
-- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding.
+- Change log: version 1, 2026-10-05, from grilling session. Version 2, 2026-10-05 (ticket 03): data set derived from seed and current UTC day; step check tolerates floating-point rounding. Ticket 04: empty filter values, strict `dueBefore`.

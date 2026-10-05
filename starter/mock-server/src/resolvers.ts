@@ -1,4 +1,5 @@
 import type { Task } from './model.ts';
+import { listTasks, type TaskListArgs } from './task-list.ts';
 import type { MockContext } from './server.ts';
 
 type NoArgs = Record<string, never>;
@@ -10,6 +11,8 @@ export const resolvers = {
   Query: {
     viewer: (_: unknown, __: NoArgs, { viewer }: MockContext) => viewer,
     processes: (_: unknown, __: NoArgs, { store }: MockContext) => store.data.processes,
+    tasks: (_: unknown, args: TaskListArgs, { store, clock }: MockContext) =>
+      listTasks(store.data.tasks.values(), args, clock),
     task: (_: unknown, { id }: { id: string }, { store }: MockContext) => store.data.tasks.get(id) ?? null,
   },
   Task: {
